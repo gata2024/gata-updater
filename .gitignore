@@ -11,3 +11,16 @@ tools/fresh_driver_test.log
 # nested here so publish_firmware.ps1 can write straight into it:
 #   git -C firmware push
 /firmware/
+
+# Android build (the keystore is a SECRET: it signs the app - back it up,
+# never publish it; dist/ holds generated packages)
+android/gata-release.keystore
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/
+android/gradle/
+android/gradlew*
+android/store_icon.png
+android/manifest-checksum.txt
+dist/
