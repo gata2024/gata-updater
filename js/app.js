@@ -428,7 +428,14 @@ const App = {
         demo: this.demo(),
         demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,
-        ui: { step: (a, b, c, d) => this.step(a, b, c, d), userGate: (t, x, a) => this.userGate(t, x, a) },
+        /* Forward EVERY argument: dropping `alt` hid the second choice
+         * ("board is running normally") so the only way forward was BOOT
+         * mode, and dropping `poll` disabled the automatic detection that
+         * continues the moment the controller appears. */
+        ui: {
+          step: (a, b, c, d) => this.step(a, b, c, d),
+          userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll),
+        },
         onDeviceLine: line => Util.dev("< " + line),
       });
       this.renderPingPong();

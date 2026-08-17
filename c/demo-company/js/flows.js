@@ -382,10 +382,14 @@ const Flows = {
         // DFU device (BOOT mode) or serial port (running app OR the parked
         // no-firmware bootloader) - policies/persisted grants make both
         // visible, so plugging the board in is enough, no click.
+        /* Primary button = the normal situation (the controller is running);
+         * BOOT mode is the fallback for old or blank firmware. */
         const picked = await ctx.ui.userGate(
-          I18N.t("gate.boot.btn"), I18N.t("gate.connect.text"),
-          async () => ({ dfu: await DfuSeDevice.requestDevice() }),
-          { label: I18N.t("gate.run.btn"), action: async () => ({ serial: await Transport.request() }) },
+          I18N.t("gate.run.btn"),
+          I18N.t("gate.connect.text") + " " +
+            I18N.t(Transport.isAndroid() ? "gate.connect.tipMobile" : "gate.connect.tipPc"),
+          async () => ({ serial: await Transport.request() }),
+          { label: I18N.t("gate.boot.btn"), action: async () => ({ dfu: await DfuSeDevice.requestDevice() }) },
           async () => {
             const d = await DfuSeDevice.getAuthorizedDevice();
             if (d) return { dfu: d };

@@ -138,6 +138,27 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* --------------------------------------------- gate wiring (app.js) */
+    {
+      // The flow passes 5 arguments to ui.userGate: title, text, action, the
+      // SECOND choice, and the auto-detect poll. A wrapper that forwards only
+      // the first three silently removes the second button and the automatic
+      // continuation - which is exactly what shipped in 1.7.0.
+      let ok = false, note = "";
+      try {
+        const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+        const m = src.match(/userGate:\s*\(([^)]*)\)\s*=>\s*this\.userGate\(([^)]*)\)/);
+        if (!m) note = "userGate wrapper not found in app.js";
+        else {
+          const params = m[1].split(",").map(s => s.trim()).filter(Boolean);
+          const args = m[2].split(",").map(s => s.trim()).filter(Boolean);
+          ok = params.length >= 5 && args.length >= 5;
+          note = "params=" + params.length + " args=" + args.length;
+        }
+      } catch (e) { note = e.message; }
+      this.check("gate: ui.userGate forwards alt button + auto-detect poll", ok, note);
+    }
+
     /* ------------------------------------------------- customer channel */
     {
       const orig = APP_CONFIG.channel;
