@@ -109,6 +109,45 @@ key it carries is the *public* one used to verify firmware.
 3. Follow the 3 steps on screen; allow USB access when Android asks.
 4. The screen is kept awake automatically while flashing.
 
+### The Android app (.apk) — already built
+
+**Download: https://gata2024.github.io/gata-updater/gata-updater.apk**
+(also in `dist\`). Signed, `com.gata.updater`, opens the hosted updater.
+
+Install on a phone: copy the file over (or open that link in the phone's
+browser) → tap it → allow "install unknown apps" once → done. The icon behaves
+like any installed app; USB-OTG works because a TWA runs the real Chrome
+engine.
+
+Rebuild it, or build one per customer:
+
+```powershell
+tools\build_android_app.ps1                                   # shared app
+tools\build_android_app.ps1 -Id acme-water -Name "ACME Water" # customer app
+tools\build_android_app.ps1 -Bundle                           # also .aab for Play
+```
+
+Each customer app gets its own package id (`com.gata.updater.acme_water`) and
+opens that customer's URL, so several can be installed side by side. The
+script prints the Digital Asset Links entry to add to
+`https://gata2024.github.io/.well-known/assetlinks.json` (repo
+`gata2024/gata2024.github.io`) — with it the app runs full-screen; without it
+everything still works but Chrome shows an address bar.
+
+**Two things that must be protected/remembered:**
+* `android\gata-release.keystore` (gitignored) signs the app — **back it up**.
+  Android only accepts updates signed with the same key; losing it means every
+  customer must uninstall and reinstall. Change the default password in
+  `build_android_app.ps1` before the first public release.
+* `.well-known/assetlinks.json` lives at the **site root**, not under
+  `/gata-updater/` — Digital Asset Links is per origin. The root repo needs a
+  `.nojekyll` file or GitHub Pages hides the dot-folder.
+
+**Not yet verified on hardware:** WebUSB inside a TWA. The APK is exactly the
+way to test it — install it, connect a board over OTG and run an update. If
+the device chooser does not appear, use the installed PWA instead (Chrome →
+Install app), which is guaranteed to work.
+
 ### Packaging for the Play Store — and what NOT to use
 
 **Do not use Capacitor or Cordova.** They render in Android **WebView**, which
