@@ -56,6 +56,13 @@ with **GitHub Pages** enabled (a `.nojekyll` file is already included):
 WebUSB/WebSerial require HTTPS (or localhost) — `file://` or plain `http://`
 on a LAN will **not** work.
 
+### Hosted app (what phones open)
+
+**https://gata2024.github.io/gata-updater/** — served over HTTPS from
+`github.com/gata2024/gata-updater` (public). Every push to `main` republishes
+it. Nothing secret lives in the app: the signing key is excluded and the only
+key it carries is the *public* one used to verify firmware.
+
 ### On an Android phone — install it as a real app
 1. Open the hosted URL in **Chrome** → menu **⋮ → Install app** (or the
    install banner). A real GATA icon (bundled PNG set) lands on the home
@@ -64,13 +71,38 @@ on a LAN will **not** work.
 3. Follow the 3 steps on screen; allow USB access when Android asks.
 4. The screen is kept awake automatically while flashing.
 
-**Play Store later (optional):** wrap the hosted URL as a Trusted Web
-Activity with [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap):
-`npx @bubblewrap/cli init --manifest https://<host>/app.webmanifest` then
-`npx @bubblewrap/cli build`, upload the produced `.aab`, and serve the
-generated `assetlinks.json` at `/.well-known/` on the host. A TWA runs real
-Chrome, so WebUSB keeps working (a plain WebView wrapper would NOT — WebView
-has no WebUSB; don't go that route).
+### Packaging for the Play Store — and what NOT to use
+
+**Do not use Capacitor or Cordova.** They render in Android **WebView**, which
+does not implement WebUSB, so the app could not talk to the controller at all.
+Worse, `navigator.usb` *exists* in WebView but never works, so naive feature
+detection reports success and the failure only appears at device selection.
+(Betaflight Configurator hit exactly this and had to write a native USB
+plugin.) Going that route means reimplementing the whole USB layer in Kotlin —
+including DFU control transfers, for which no maintained plugin exists.
+
+**Use a Trusted Web Activity** (renders in real Chrome, so WebUSB keeps
+working):
+
+```bash
+npx @bubblewrap/cli init --manifest https://gata2024.github.io/gata-updater/app.webmanifest
+npx @bubblewrap/cli build          # produces the .aab to upload to Play
+```
+
+Then publish the generated `assetlinks.json` at
+`https://gata2024.github.io/gata-updater/.well-known/assetlinks.json`.
+Play policy has no USB restriction — the TWA host app declares no USB
+permission at all, because the USB access happens inside Chrome.
+
+**Verify before investing:** WebUSB inside a TWA is architecturally sound but
+not something we have confirmed on hardware; build the TWA, install it on a
+real phone with an OTG cable and check that the device chooser appears. The
+installed PWA above needs no such verification — it runs in Chrome itself.
+
+**Android transport note:** the app deliberately uses **WebUSB** on Android,
+not Web Serial. Chrome 138+ exposes `navigator.serial` on Android but lists
+only Bluetooth RFCOMM ports — wired USB is not implemented there, so
+preferring it would show an empty picker.
 
 ### Windows only, once per PC
 The DFU phase needs the WinUSB driver. Automatic install: board in BOOT mode →
