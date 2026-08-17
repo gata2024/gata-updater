@@ -114,32 +114,38 @@ class GataBootloader {
     Util.ok("External flash erased (" + Math.round((Date.now() - start) / 1000) + " s).");
   }
 
-  /* Stream the main application into external flash at 0x90000000. */
-  async writeApp(bytes, onProgress) {
+  /* Stream the main application into external flash at 0x90000000.
+   * opts.chunk / opts.pace exist for the gentle retry after a stall: writing
+   * in smaller pieces with longer gaps gives the flash chip time to finish a
+   * slow page write instead of NAKing until the host gives up. */
+  async writeApp(bytes, onProgress, opts) {
+    const o = Object.assign({ chunk: 1024, pace: 8, stallMs: 8000 }, opts || {});
     this.clear();
     await this.send("WRITE:" + bytes.length);
     await this.waitFor(["READY_FOR_DATA"], 4000, ["QSPI_INIT_ERROR", "UNKNOWN_COMMAND"]);
     this.clear();
 
-    const chunk = 1024;
+    const chunk = o.chunk;
     for (let off = 0; off < bytes.length; off += chunk) {
       this._abortCheck();
       // Stall watchdog: a frozen bootloader NAKs forever and write() then
       // never resolves - fail loudly instead of hanging the update at N%.
       const wrote = await Promise.race([
         this.sendRaw(bytes.subarray(off, Math.min(off + chunk, bytes.length))).then(() => true),
-        Util.sleep(8000).then(() => false),
+        Util.sleep(o.stallMs).then(() => false),
       ]);
       if (!wrote) {
-        throw new UploaderError(
+        const e = new UploaderError(
           "The controller stopped accepting data at " +
           Math.round((off / bytes.length) * 100) + "% (frozen bootloader).",
           I18N.t("hint.retry"));
+        e.stalledAt = off;                       // lets the flow retry gently
+        throw e;
       }
       if (onProgress) onProgress(Math.min(off + chunk, bytes.length) / bytes.length);
       // The device writes each 256-byte page inside the USB interrupt and NAKs
       // while busy; this small pause mirrors the Python tool's pacing.
-      await Util.sleep(8);
+      await Util.sleep(o.pace);
       if (this._buf.includes("WRITE_ERROR") || this._buf.includes("QSPI_MMAP_ERROR")) {
         throw new UploaderError("Device reported a write error during upload.", I18N.t("hint.retry"));
       }

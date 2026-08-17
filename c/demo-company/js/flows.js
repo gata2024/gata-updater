@@ -546,11 +546,40 @@ const Flows = {
         }
       }
 
-      /* Application - streamed with the ESP silenced (or absent + defused). */
-      step("app", "active",
-        I18N.t("d.appInstalling", { s: Util.fmtBytes(ctx.pkg.main.length) }), 0.15);
-      await bl.writeApp(ctx.pkg.main, f =>
-        step("app", "active", I18N.t("d.appProg", { p: Math.round(f * 100) }), 0.15 + f * 0.8));
+      /* Application - streamed with the ESP silenced (or absent + defused).
+       * If the controller stops accepting data mid-stream, do NOT end the
+       * update: ask for a power cycle, wait for the board to come back and
+       * redo erase+write at a gentler pace (half-size pieces, longer gaps).
+       * A stalled write leaves the flash half-written, so the erase has to be
+       * repeated - which is safe, the bootloader stays in update mode while
+       * no valid application is present. */
+      const writeAttempts = [
+        { chunk: 1024, pace: 8,  stallMs: 8000 },
+        { chunk: 512,  pace: 25, stallMs: 15000 },
+      ];
+      for (let attempt = 0; attempt < writeAttempts.length; attempt++) {
+        try {
+          step("app", "active",
+            I18N.t("d.appInstalling", { s: Util.fmtBytes(ctx.pkg.main.length) }), 0.15);
+          await bl.writeApp(ctx.pkg.main, f =>
+            step("app", "active", I18N.t("d.appProg", { p: Math.round(f * 100) }), 0.15 + f * 0.8),
+            writeAttempts[attempt]);
+          break;                                   // written
+        } catch (e) {
+          const isStall = e && typeof e.stalledAt === "number";
+          if (!isStall || attempt === writeAttempts.length - 1 || ctx.demo) throw e;
+          Util.warn("Write stalled - asking for a power cycle and retrying more gently.");
+          step("app", "warn", I18N.t("d.stallRetry"), null);
+          await this._safeClose(bl.t);
+          await ctx.ui.userGate(I18N.t("gate.power.btn"), I18N.t("gate.power.text"),
+            async () => true, null,
+            async () => (await Transport.reconnect()) || null);
+          bl = await this._connectBootloader(ctx, { tries: 15, delay: 1200 });
+          step("app", "active", I18N.t("d.extErase"), 0);
+          await bl.format(sec => step("app", "active",
+            I18N.t("d.extEraseSec", { t: Math.round(sec) }), null));
+        }
+      }
       this._ck();
       await bl.verify();
       step("app", "done", I18N.t("d.appDone"), 1);
