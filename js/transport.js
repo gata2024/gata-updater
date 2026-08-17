@@ -208,7 +208,24 @@ class UsbCdcTransport {
 
 /* Pick the best transport for this platform. */
 const Transport = {
+  /* Android needs WebUSB, NOT Web Serial - and this is a trap, because since
+   * Chrome 138 navigator.serial EXISTS on Android while only ever listing
+   * Bluetooth RFCOMM ports (wired USB is not implemented). Preferring it
+   * there would show an empty device picker and never find the controller.
+   * So: Android -> WebUSB CDC; desktop -> Web Serial (native COM driver). */
+  isAndroid() {
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.platform) {
+        return /android/i.test(navigator.userAgentData.platform);
+      }
+    } catch (e) { /* fall through to the UA string */ }
+    return /android/i.test(navigator.userAgent || "");
+  },
+  useWebUsbFirst() {
+    return this.isAndroid() && UsbCdcTransport.available();
+  },
   preferred() {
+    if (this.useWebUsbFirst()) return "webusb-cdc";
     if (SerialTransport.available()) return "serial";
     if (UsbCdcTransport.available()) return "webusb-cdc";
     return null;
@@ -233,18 +250,21 @@ const Transport = {
     } catch (e) { /* purely informational */ }
   },
   async request() {
+    if (this.useWebUsbFirst()) return UsbCdcTransport.requestDevice();
     if (SerialTransport.available()) return SerialTransport.requestPort();
     if (UsbCdcTransport.available()) return UsbCdcTransport.requestDevice();
     throw new UploaderError("Neither Web Serial nor WebUSB is available.",
       "Use Chrome/Edge on a computer or Chrome on Android.");
   },
   async reconnect() {
-    if (SerialTransport.available()) {
-      const t = await SerialTransport.getAuthorizedPort();
-      if (t) return t;
-    }
-    if (UsbCdcTransport.available()) {
-      const t = await UsbCdcTransport.getAuthorizedDevice();
+    const order = this.useWebUsbFirst()
+      ? [UsbCdcTransport, SerialTransport]
+      : [SerialTransport, UsbCdcTransport];
+    for (const T of order) {
+      if (!T.available()) continue;
+      const t = T === SerialTransport
+        ? await SerialTransport.getAuthorizedPort()
+        : await UsbCdcTransport.getAuthorizedDevice();
       if (t) return t;
     }
     return null;

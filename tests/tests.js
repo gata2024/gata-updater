@@ -138,6 +138,19 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* ------------------------------------------------- transport choice */
+    {
+      const orig = Transport.isAndroid;
+      try {
+        Transport.isAndroid = () => true;
+        this.check("transport: Android prefers WebUSB (Web Serial there is Bluetooth-only)",
+          !navigator.usb || Transport.preferred() === "webusb-cdc");
+        Transport.isAndroid = () => false;
+        this.check("transport: desktop prefers Web Serial",
+          !navigator.serial || Transport.preferred() === "serial");
+      } finally { Transport.isAndroid = orig; }
+    }
+
     /* ------------------------------------------------- i18n completeness */
     const missing = I18N.missingKeys();
     this.check("i18n: AR + TR cover every EN key", missing.length === 0, missing.join(", "));

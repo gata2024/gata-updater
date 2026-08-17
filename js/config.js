@@ -5,7 +5,7 @@
 "use strict";
 
 const APP_CONFIG = {
-  version: "1.6.3",                       // bump on every deploy (drives the offline cache)
+  version: "1.6.4",                       // bump on every deploy (drives the offline cache)
   productName: "GATA",
 
   /* Where firmware comes from, tried in this order (first one that answers):
