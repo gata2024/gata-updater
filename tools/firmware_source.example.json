@@ -1,5 +1,5 @@
 {
-  "baseUrl": "https://git.gatasys.com/Software/gata-firmware/raw/branch/main/",
+  "baseUrl": "https://raw.githubusercontent.com/gata2024/gata-firmware/main/",
   "token": "",
-  "note": "Firmware download source for THIS installation. serve.ps1 copies this file to firmware_source.json on first run. Add a token only if the firmware server refuses anonymous downloads - and only ever a READ-ONLY account token, never a personal one. Manage with tools\\set_firmware_source.ps1."
+  "note": "Fallback firmware source for THIS installation, used by the local server's /__fw/ proxy when the direct download in js/config.js cannot be reached. serve.ps1 copies this file to firmware_source.json on first run. Point it at the company Gitea mirror (https://git.gatasys.com/Software/gata-firmware/raw/branch/main/) plus a READ-ONLY account token if you ever need to. Manage with tools\\set_firmware_source.ps1."
 }

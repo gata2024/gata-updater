@@ -160,12 +160,31 @@ The firmware list is **cryptographically signed** (ECDSA P-256):
   from your PC. (They could at most serve an *older* signed list; the app
   logs a SECURITY rollback warning when the list gets older.)
 
-### Where this is published (company setup — already done)
+### Where this is published (already set up and verified)
 
 | What | Where |
 |---|---|
 | App source (this folder) | `https://git.gatasys.com/Software/gata-updater` — **private** |
-| Firmware download channel | `https://git.gatasys.com/Software/gata-firmware` — the `firmware/` folder is its own git repo |
+| Firmware download channel (**live**) | `https://github.com/gata2024/gata-firmware` — **public**, served via `raw.githubusercontent.com` |
+| Firmware mirror | `https://git.gatasys.com/Software/gata-firmware` — same content, pushed together |
+
+The `firmware/` folder is its own git repository with **two push URLs**, so a
+single `git push` (or `publish_firmware.ps1`) updates GitHub *and* the company
+Gitea in one step. Apps download from GitHub raw, which is public and sends
+`Access-Control-Allow-Origin`, so **PCs and Android phones work with no
+credentials, no CORS setup and no server administration at all**. Publishing
+firmware publicly is safe by design: the signature — not the location —
+decides what a controller accepts.
+
+To move the download channel to the company server later (once anonymous read
+or a read-only account exists there), no rebuild is needed:
+
+```powershell
+tools\set_firmware_source.ps1 -BaseUrl https://git.gatasys.com/Software/gata-firmware/raw/branch/main/ -Token <read-only token>
+```
+
+…and set `cloudManifestUrl` in `js/config.js` to that server (or leave it
+pointing at GitHub as the public fallback).
 
 The installed app fetches firmware through its **own local server**
 (`/__fw/…` in `tools\serve.ps1`), which downloads from the firmware repo on

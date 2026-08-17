@@ -5,18 +5,21 @@
 "use strict";
 
 const APP_CONFIG = {
-  version: "1.6.2",                       // bump on every deploy (drives the offline cache)
+  version: "1.6.3",                       // bump on every deploy (drives the offline cache)
   productName: "GATA",
 
   /* Where firmware comes from, tried in this order (first one that answers):
-   *  1. "__fw/manifest.json"  - the local server's proxy to the company
-   *     firmware repository (installed app; no CORS setup, token stays local);
-   *  2. cloudManifestUrl      - direct download (hosted copy / Android; the
-   *     firmware server must send Access-Control-Allow-Origin);
+   *  1. cloudManifestUrl      - direct download. GitHub raw serves it publicly
+   *     and sends Access-Control-Allow-Origin, so PCs and Android phones can
+   *     fetch it with no server setup and no credentials;
+   *  2. "__fw/manifest.json"  - the local server's proxy (installed app only).
+   *     Covers hosts that need a token or send no CORS header - e.g. the
+   *     company Gitea mirror; configure with tools\set_firmware_source.ps1;
    *  3. defaultManifestUrl    - the copy bundled in this folder (offline).
-   * A BAD SIGNATURE is always fatal - it never falls through to the next one. */
+   * A BAD SIGNATURE is always fatal - it never falls through to the next one.
+   * Every source is equally untrusted: only the signature decides. */
+  cloudManifestUrl: "https://raw.githubusercontent.com/gata2024/gata-firmware/main/manifest.json",
   proxyManifestUrl: "__fw/manifest.json",
-  cloudManifestUrl: "https://git.gatasys.com/Software/gata-firmware/raw/branch/main/manifest.json",
   defaultManifestUrl: "firmware/manifest.json",
 
   // USB identities (from USBupdaterCode descriptors / STM32 ROM)

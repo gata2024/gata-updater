@@ -37,8 +37,8 @@ const Cloud = {
     if (custom && custom.trim()) return [custom.trim()];
     const list = [];
     const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-    if (local && APP_CONFIG.proxyManifestUrl) list.push(APP_CONFIG.proxyManifestUrl);
     if (APP_CONFIG.cloudManifestUrl) list.push(APP_CONFIG.cloudManifestUrl);
+    if (local && APP_CONFIG.proxyManifestUrl) list.push(APP_CONFIG.proxyManifestUrl);
     if (APP_CONFIG.defaultManifestUrl) list.push(APP_CONFIG.defaultManifestUrl);
     return list;
   },
