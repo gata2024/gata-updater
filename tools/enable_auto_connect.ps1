@@ -18,7 +18,10 @@
 # policy is set. That is expected; -Remove restores the previous state.
 
 param(
-    [string[]]$Origins = @("http://127.0.0.1:8765"),
+    # Both the local server AND the hosted app: the browser stores USB
+    # permission per origin, so the hosted copy needs its own entry or it asks
+    # for the device again the first time it is used there.
+    [string[]]$Origins = @("http://127.0.0.1:8765", "https://gata2024.github.io"),
     [switch]$Remove
 )
 
@@ -82,20 +85,15 @@ if ($Remove) {
 foreach ($key in $browserKeys) {
     if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
     foreach ($p in $policies) {
-        $entries = @(Get-Existing $key $p.name)
-        foreach ($origin in $Origins) {
-            $already = $entries | Where-Object {
-                $_.urls -contains $origin -and
-                ($_.devices | Where-Object { $_.vendor_id -eq $p.vendor -and $_.product_id -eq $p.product })
-            }
-            if (-not $already) {
-                $entries += [pscustomobject]@{
-                    devices = @([ordered]@{ vendor_id = $p.vendor; product_id = $p.product })
-                    urls    = @($origin)
-                }
-            }
+        # Build the JSON by hand and always write the COMPLETE list.
+        # ConvertTo-Json on a mixed/nested collection produces {"value":...,
+        # "Count":...} wrappers that Chrome silently ignores - which is exactly
+        # what earlier versions of this script left in the registry.
+        $parts = foreach ($origin in $Origins) {
+            '{"devices":[{"vendor_id":' + $p.vendor + ',"product_id":' + $p.product +
+            '}],"urls":["' + $origin + '"]}'
         }
-        $json = ConvertTo-Json @($entries) -Depth 6 -Compress
+        $json = '[' + ($parts -join ',') + ']'
         New-ItemProperty -Path $key -Name $p.name -PropertyType String -Value $json -Force | Out-Null
         Write-Host "set $($p.name) @ $key"
     }
