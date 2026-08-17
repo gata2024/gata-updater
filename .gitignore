@@ -1,0 +1,12 @@
+# GATA Cloud Uploader - never publish these
+tools/signing_key.json
+tools/autopsy_*.log
+tools/gdbsrv_*.txt
+tools/gdbsrv_out.txt
+tools/gdbsrv_err.txt
+tools/fresh_driver_test.log
+
+# The cloud download channel is its OWN repository (Software/gata-firmware),
+# nested here so publish_firmware.ps1 can write straight into it:
+#   git -C firmware push
+/firmware/
