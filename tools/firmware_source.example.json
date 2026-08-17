@@ -1,0 +1,5 @@
+{
+  "baseUrl": "https://git.gatasys.com/Software/gata-firmware/raw/branch/main/",
+  "token": "",
+  "note": "Firmware download source for THIS installation. serve.ps1 copies this file to firmware_source.json on first run. Add a token only if the firmware server refuses anonymous downloads - and only ever a READ-ONLY account token, never a personal one. Manage with tools\\set_firmware_source.ps1."
+}

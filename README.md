@@ -160,7 +160,45 @@ The firmware list is **cryptographically signed** (ECDSA P-256):
   from your PC. (They could at most serve an *older* signed list; the app
   logs a SECURITY rollback warning when the list gets older.)
 
-### Uploading to the server (GitHub Pages, step by step)
+### Where this is published (company setup — already done)
+
+| What | Where |
+|---|---|
+| App source (this folder) | `https://git.gatasys.com/Software/gata-updater` — **private** |
+| Firmware download channel | `https://git.gatasys.com/Software/gata-firmware` — the `firmware/` folder is its own git repo |
+
+The installed app fetches firmware through its **own local server**
+(`/__fw/…` in `tools\serve.ps1`), which downloads from the firmware repo on
+the app's behalf. That means no CORS configuration is ever needed, and any
+access token stays in `tools\firmware_source.json` on the PC — it never
+reaches the browser. Configure/test with:
+
+```powershell
+tools\set_firmware_source.ps1            # show + test the current source
+tools\set_firmware_source.ps1 -Token …   # only if the server needs sign-in
+```
+
+**One server-side step is still open** (needs the Gitea administrator),
+because this Gitea has `REQUIRE_SIGNIN_VIEW` enabled — anonymous downloads are
+refused server-wide. Pick one:
+
+* **(a) Best:** allow anonymous read (disable `REQUIRE_SIGNIN_VIEW`, and set
+  the `Software` org visibility to Public so its *public* repos are readable).
+  Private repos stay private. Then nothing else is needed anywhere.
+* **(b)** Create a **read-only account** (e.g. `gata-firmware-reader`), give it
+  read access to `Software/gata-firmware` only, and run
+  `tools\set_firmware_source.ps1 -Token <that account's token>` on the PCs
+  that get the app. Never use a personal token — Gitea tokens are
+  account-wide.
+
+Until then the app falls back to the firmware bundled in the folder, so it
+keeps working offline; only *new* releases need the step above.
+
+`firmware/manifest.json` and `.sig` are stored with `-text` in
+`.gitattributes` — this is load-bearing: line-ending normalisation would
+change the bytes and break every signature check.
+
+### Alternative host (GitHub Pages, step by step)
 
 One time:
 1. On GitHub create an empty repository, e.g. `gata-updater`.

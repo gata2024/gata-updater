@@ -25,6 +25,11 @@ $mime = @{
     ".md"   = "text/plain; charset=utf-8"
 }
 
+# First run on this PC: create the firmware-source config from the example.
+$fwCfg = Join-Path $PSScriptRoot 'firmware_source.json'
+$fwExample = Join-Path $PSScriptRoot 'firmware_source.example.json'
+if (-not (Test-Path $fwCfg) -and (Test-Path $fwExample)) { Copy-Item $fwExample $fwCfg }
+
 $listener = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), $port
 try {
     $listener.Start()
@@ -104,6 +109,50 @@ while ($true) {
             if ($null -eq $json) { $json = '{"main_firmware":[],"cloud_firmware":[]}' }
             $body = [System.Text.Encoding]::UTF8.GetBytes($json)
             $ctype = "application/json; charset=utf-8"
+        } elseif ($path.StartsWith("/__fw/")) {
+            # Firmware download proxy: the page asks THIS server, and this
+            # server fetches from the company firmware repository. Two reasons:
+            #  - no CORS setup is ever needed on the firmware server;
+            #  - an access token (if the server needs one) stays here, in the
+            #    PC's own folder, and never reaches the browser.
+            # Configure with tools\set_firmware_source.ps1.
+            $relFw = $path.Substring(6)
+            $cfgPath = Join-Path $PSScriptRoot "firmware_source.json"
+            if ($relFw -match '\.\.' -or $relFw -eq "") {
+                $status = "400 Bad Request"
+                $body = [System.Text.Encoding]::UTF8.GetBytes("bad firmware path")
+                $ctype = "text/plain; charset=utf-8"
+            } elseif (-not (Test-Path $cfgPath)) {
+                $status = "502 Bad Gateway"
+                $body = [System.Text.Encoding]::UTF8.GetBytes("no firmware source configured (run tools\set_firmware_source.ps1)")
+                $ctype = "text/plain; charset=utf-8"
+            } else {
+                try {
+                    $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                    $base = [string]$cfg.baseUrl
+                    if (-not $base.EndsWith("/")) { $base = $base + "/" }
+                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                    $req = [System.Net.HttpWebRequest]::Create($base + $relFw)
+                    $req.Timeout = 60000
+                    $req.ReadWriteTimeout = 120000
+                    $req.UserAgent = "GATA-Uploader"
+                    if ($cfg.token) { $req.Headers.Add("Authorization", "token " + $cfg.token) }
+                    $resp = $req.GetResponse()
+                    $ms = New-Object System.IO.MemoryStream
+                    $resp.GetResponseStream().CopyTo($ms)
+                    $resp.Close()
+                    $body = $ms.ToArray()
+                    $ext = [System.IO.Path]::GetExtension($relFw).ToLower()
+                    if ($mime.ContainsKey($ext)) { $ctype = $mime[$ext] }
+                    Write-Host ("  [firmware] {0} -> {1:N0} bytes" -f $relFw, $body.Length) -ForegroundColor DarkGray
+                } catch {
+                    $status = "502 Bad Gateway"
+                    $msg = "firmware server unreachable or refused: " + $_.Exception.Message
+                    $body = [System.Text.Encoding]::UTF8.GetBytes($msg)
+                    $ctype = "text/plain; charset=utf-8"
+                    Write-Host ("  [firmware] FAILED {0}: {1}" -f $relFw, $_.Exception.Message) -ForegroundColor Yellow
+                }
+            }
         } elseif (-not $fullResolved.StartsWith([System.IO.Path]::GetFullPath($root))) {
             $status = "403 Forbidden"
             $body = [System.Text.Encoding]::UTF8.GetBytes("forbidden")

@@ -182,4 +182,24 @@ if (Test-Path $keyPath) {
 
 Write-Host ""
 Write-Host "manifest.json updated - $Version is now the latest of $($out.versions.Count) version(s)." -ForegroundColor Green
-Write-Host "Next: upload/push the whole 'firmware' folder to your web host." -ForegroundColor Green
+
+# ---- publish to the firmware repository (Software/gata-firmware) ----------
+if (Test-Path (Join-Path $FirmwareDir ".git")) {
+    Write-Host ""
+    Write-Host "Publishing to the firmware server..." -ForegroundColor Cyan
+    Push-Location $FirmwareDir
+    try {
+        & git add -A
+        & git -c core.safecrlf=false commit -q -m "Firmware $Version"
+        & git push -q origin main
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "PUBLISHED - every updater sees $Version on its next start." -ForegroundColor Green
+        } else {
+            Write-Host "git push failed - run it manually from $FirmwareDir" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host ("git step failed: " + $_.Exception.Message) -ForegroundColor Yellow
+    } finally { Pop-Location }
+} else {
+    Write-Host "Next: upload the 'firmware' folder to your web host." -ForegroundColor Green
+}

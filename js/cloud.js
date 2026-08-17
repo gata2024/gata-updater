@@ -24,15 +24,46 @@ const Cloud = {
   _db: null,
 
   manifestUrl() {
-    return localStorage.getItem("gata.manifestUrl") || this.DEFAULT_MANIFEST_URL;
+    return localStorage.getItem("gata.manifestUrl") || this.manifestUrlCandidates()[0];
   },
   setManifestUrl(url) {
     if (url && url.trim()) localStorage.setItem("gata.manifestUrl", url.trim());
     else localStorage.removeItem("gata.manifestUrl");
   },
 
+  /* Sources to try, best first. A URL set in Settings wins outright. */
+  manifestUrlCandidates() {
+    const custom = localStorage.getItem("gata.manifestUrl");
+    if (custom && custom.trim()) return [custom.trim()];
+    const list = [];
+    const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+    if (local && APP_CONFIG.proxyManifestUrl) list.push(APP_CONFIG.proxyManifestUrl);
+    if (APP_CONFIG.cloudManifestUrl) list.push(APP_CONFIG.cloudManifestUrl);
+    if (APP_CONFIG.defaultManifestUrl) list.push(APP_CONFIG.defaultManifestUrl);
+    return list;
+  },
+
+  /* Try each source until one answers. Transport failures fall through to the
+   * next; a SIGNATURE failure never does - a forged list must stop the app,
+   * not silently demote it to another source. */
   async fetchManifest() {
-    const url = this.manifestUrl();
+    const candidates = this.manifestUrlCandidates();
+    let lastErr = null;
+    for (let i = 0; i < candidates.length; i++) {
+      try {
+        return await this.fetchManifestFrom(candidates[i]);
+      } catch (e) {
+        if (e && e.fatal) throw e;                 // signature verdict: stop here
+        lastErr = e;
+        if (i < candidates.length - 1) {
+          Util.warn("Firmware source unavailable (" + candidates[i] + ") - trying the next one.");
+        }
+      }
+    }
+    throw lastErr || new UploaderError("No firmware source could be reached.");
+  },
+
+  async fetchManifestFrom(url) {
     Util.info("Loading firmware list from " + url + " ...");
     let res;
     try {
@@ -81,14 +112,22 @@ const Cloud = {
     let res = null;
     try { res = await fetch(url + ".sig", { cache: "no-store" }); } catch (e) { /* treated as missing */ }
     if (!res || !res.ok) {
-      throw new UploaderError(I18N.t("err.sigMissing"), I18N.t("hint.sig"));
+      Util.err(I18N.t("err.sigMissing") + " (" + url + ".sig)");   // must appear in the support log
+      const e = new UploaderError(I18N.t("err.sigMissing"), I18N.t("hint.sig"));
+      e.fatal = true;                              // never fall back to another source
+      throw e;
     }
     let sig = null;
     try { sig = Uint8Array.from(atob((await res.text()).trim()), c => c.charCodeAt(0)); }
     catch (e) { /* malformed base64 -> invalid */ }
     const ok = sig && sig.length >= 64 &&
       await this.verifySignedBytes(bytes, sig, APP_CONFIG.signingPublicKey);
-    if (!ok) throw new UploaderError(I18N.t("err.sigBad"), I18N.t("hint.sig"));
+    if (!ok) {
+      Util.err(I18N.t("err.sigBad") + " (" + url + ")");
+      const e = new UploaderError(I18N.t("err.sigBad"), I18N.t("hint.sig"));
+      e.fatal = true;
+      throw e;
+    }
     Util.ok("Firmware list signature verified (ECDSA P-256).");
   },
 

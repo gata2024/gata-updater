@@ -1,5 +1,6 @@
 # GATA Cloud Uploader - never publish these
 tools/signing_key.json
+tools/firmware_source.json
 tools/autopsy_*.log
 tools/gdbsrv_*.txt
 tools/gdbsrv_out.txt
