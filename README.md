@@ -74,10 +74,32 @@ That one command produces:
 | `c\acme-water\` | their installable app, published at `https://gata2024.github.io/gata-updater/c/acme-water/` |
 | `dist\gata-updater-acme-water.zip` | hand-off package for offline PCs (app + CLICK_ME + tools + "READ ME FIRST") |
 
-Publish firmware for one customer only:
+### Giving each company a different firmware version
 
 ```powershell
+# who has what right now
+.\assign_firmware.ps1 -List
+
+# publish a NEW build to one company only
 .\publish_firmware.ps1 -Version 16.9.1 -Main C:\build\M_16_9_1.bin -Customer acme-water -Notes "..."
+
+# give a company a version that already exists elsewhere (no rebuild, no upload)
+.\assign_firmware.ps1 -Customer acme-water -Version 16.8.26.5
+
+# ...and show them nothing else
+.\assign_firmware.ps1 -Customer acme-water -Version 16.8.26.5 -Only
+```
+
+The `.bin` files are stored **once** at the firmware root and shared by every
+channel — assigning a version only edits (and re-signs) that company's list, so
+ten companies on three different versions still cost one copy of each file.
+`-List` prints a table of company → offered version and flags any unsigned
+channel.
+
+After changing the app itself, refresh every company's copy:
+
+```powershell
+.\rebuild_customers.ps1        # add -Apk to rebuild their Android apps too
 ```
 
 Then `git push` in both repositories (or let `publish_firmware.ps1` push the
