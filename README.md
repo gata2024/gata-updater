@@ -56,6 +56,44 @@ with **GitHub Pages** enabled (a `.nojekyll` file is already included):
 WebUSB/WebSerial require HTTPS (or localhost) — `file://` or plain `http://`
 on a LAN will **not** work.
 
+## Customer packages (different firmware per company)
+
+Each customer gets **their own app and their own firmware stream**, so one
+company never sees or installs another company's versions.
+
+```powershell
+cd GATA_Cloud_Uploader\tools
+.\new_customer.ps1 -Id acme-water -Name "ACME Water Systems"
+```
+
+That one command produces:
+
+| Output | Purpose |
+|---|---|
+| `firmware\customers\acme-water\manifest.json` (+ `.sig`) | that customer's signed firmware list — the `.bin` files stay shared at the firmware root, so nothing is duplicated |
+| `c\acme-water\` | their installable app, published at `https://gata2024.github.io/gata-updater/c/acme-water/` |
+| `dist\gata-updater-acme-water.zip` | hand-off package for offline PCs (app + CLICK_ME + tools + "READ ME FIRST") |
+
+Publish firmware for one customer only:
+
+```powershell
+.\publish_firmware.ps1 -Version 16.9.1 -Main C:\build\M_16_9_1.bin -Customer acme-water -Notes "..."
+```
+
+Then `git push` in both repositories (or let `publish_firmware.ps1` push the
+firmware repo). Customers see the new version the next time they open the app —
+nothing to reinstall.
+
+**The channel is part of the signature.** Each app is pinned to its customer id
+and the id is written *inside* the signed manifest, so an app refuses any list
+that belongs to someone else — verified live: the demo-company app rejects the
+shared channel with *"this firmware list belongs to another customer"*. Mixing
+up a URL cannot ship the wrong firmware to the wrong company.
+
+New versions of the **app** reach customers automatically for the hosted
+installs (they always load the current files); ZIP installs are updated by
+sending a new ZIP, so prefer the URL where there is internet.
+
 ### Hosted app (what phones open)
 
 **https://gata2024.github.io/gata-updater/** — served over HTTPS from
