@@ -12,8 +12,8 @@ const APP_CONFIG = {
    * signed manifest, and the app refuses a list whose channel does not match -
    * so one customer's app can never install another customer's firmware, even
    * if the URLs were mixed up. "default" is the shared channel. */
-  channel: "default",
-  customerName: "",
+  channel: "demo-company",
+  customerName: "Demo Company Ltd",
   productName: "GATA",
 
   /* Where firmware comes from, tried in this order (first one that answers):
@@ -26,7 +26,7 @@ const APP_CONFIG = {
    *  3. defaultManifestUrl    - the copy bundled in this folder (offline).
    * A BAD SIGNATURE is always fatal - it never falls through to the next one.
    * Every source is equally untrusted: only the signature decides. */
-  cloudManifestUrl: "https://raw.githubusercontent.com/gata2024/gata-firmware/main/manifest.json",
+  cloudManifestUrl: "https://raw.githubusercontent.com/gata2024/gata-firmware/main/customers/demo-company/manifest.json",
   proxyManifestUrl: "__fw/manifest.json",
   defaultManifestUrl: "firmware/manifest.json",
 

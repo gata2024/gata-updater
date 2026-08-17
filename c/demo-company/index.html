@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src *; img-src 'self' data:; style-src 'self'; script-src 'self'; manifest-src 'self'; base-uri 'self'; object-src 'none'">
+<meta name="theme-color" content="#0b57d0">
+<title>GATA Firmware Updater - Demo Company Ltd</title>
+<link rel="manifest" href="app.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg>
+    <div>
+      <h1 data-i18n="app.title">GATA Firmware Updater</h1>
+      <p data-i18n="app.subtitle">Cloud firmware update over USB</p>
+    </div>
+  </div>
+  <div class="topactions">
+    <select id="selLang" class="langsel" aria-label="Language">
+      <option value="en">EN</option>
+      <option value="ar">ع</option>
+      <option value="tr">TR</option>
+    </select>
+    <button id="btnSettings" class="iconbtn" data-i18n-title="settings.title" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 4a7.8 7.8 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L16.5 3h-4l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.9 7.9 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div id="platformBanner" class="banner hidden" role="note"></div>
+  <div id="demoBanner" class="banner demo hidden" data-i18n="banner.demo">DEMO MODE — no real device is used. Turn it off under Settings.</div>
+
+  <!-- STEP 1 : firmware source -->
+  <section class="card">
+    <div class="cardhead">
+      <span class="stepnum">1</span>
+      <h2 data-i18n="s1.title">Choose the software</h2>
+      <span id="srcBadge" class="badge" data-i18n="badge.cloud">cloud</span>
+    </div>
+    <div id="cloudPane">
+      <div id="versionList" class="versions"><div class="muted" data-i18n="d.loading">Loading firmware list…</div></div>
+      <div class="row gap wrap">
+        <button id="btnRefresh" class="btn ghost" data-i18n="btn.refresh">Refresh list</button>
+        <button id="btnUseLocal" class="btn ghost" data-i18n="btn.useLocal">Use files from this device instead</button>
+      </div>
+    </div>
+    <div id="localPane" class="hidden">
+      <p class="muted" data-i18n="local.hint">Files found in the main_firmware and cloud_firmware folders inside the uploader:</p>
+      <div id="localList" class="locallist"></div>
+      <div class="row gap wrap">
+        <button id="btnRescan" class="btn ghost" data-i18n="local.rescan">Scan again</button>
+        <button id="btnUseCloud" class="btn ghost" data-i18n="btn.useCloud">Back to cloud versions</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 2 : prepare board -->
+  <section class="card">
+    <div class="cardhead">
+      <span class="stepnum">2</span>
+      <h2 data-i18n="s2.title">Prepare the controller</h2>
+    </div>
+    <ol class="prep">
+      <li id="prepConnect" data-i18n="prep.1.pc">Connect the controller to this computer with a USB cable.</li>
+      <li data-i18n-html="prep.2">Press and <b>hold the BOOT button</b>.</li>
+      <li data-i18n-html="prep.3">Press and <b>release RESET</b>, then release BOOT.</li>
+    </ol>
+    <p class="muted small" data-i18n="prep.note">The screen of the controller stays off in update mode — that is normal.</p>
+    <p class="muted small" data-i18n="prep.note2">First time on a new computer or phone, the app asks you to pick the USB device from a list — just follow the on-screen prompts.</p>
+  </section>
+
+  <!-- STEP 3 : update -->
+  <section class="card">
+    <div class="cardhead">
+      <span class="stepnum">3</span>
+      <h2 data-i18n="s3.title">Update</h2>
+    </div>
+
+    <div class="actions">
+      <button id="btnUpdCtrl" class="btn action">
+        <span class="acticon ctrl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H4zM2 17h20v2H2z"/></svg></span>
+        <span class="actwords"><b data-i18n="btn.updCtrl">Update controller</b><small data-i18n="btn.updCtrlDesc">System firmware + controller software (ESP32 untouched)</small></span>
+      </button>
+      <button id="btnUpdCloud" class="btn action">
+        <span class="acticon cloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 18H7a5 5 0 1 1 .8-9.9A7 7 0 0 1 21 10a4 4 0 0 1-2 8z"/></svg></span>
+        <span class="actwords"><b data-i18n="btn.updCloud">Update cloud module (ESP32)</b><small data-i18n="btn.updCloudDesc">Only the ESP32 cloud firmware — the controller software is kept</small></span>
+      </button>
+      <button id="btnUpdBoth" class="btn action prime">
+        <span class="acticon both"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg></span>
+        <span class="actwords"><b data-i18n="btn.updBoth">Update controller + cloud</b><small data-i18n="btn.updBothDesc">Everything: system firmware, controller software and ESP32</small></span>
+      </button>
+    </div>
+    <div class="row center gap">
+      <button id="btnCancel" class="btn danger hidden" data-i18n="btn.cancel">Cancel</button>
+    </div>
+
+    <div id="gateBox" class="gate hidden">
+      <p id="gateText"></p>
+      <div class="row center gap wrap">
+        <button id="gateBtn" class="btn primary"></button>
+        <button id="gateBtnAlt" class="btn ghost hidden"></button>
+      </div>
+    </div>
+
+    <ul id="stepList" class="steps hidden" aria-live="polite">
+      <li data-step="download"><span class="dot"></span><div><b data-i18n="st.download">Download software</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="system"><span class="dot"></span><div><b data-i18n="st.system">System firmware</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="connect"><span class="dot"></span><div><b data-i18n="st.connect">Connect</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="esp"><span class="dot"></span><div><b data-i18n="st.esp">ESP32 module</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="app"><span class="dot"></span><div><b data-i18n="st.app">Controller software</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="finish"><span class="dot"></span><div><b data-i18n="st.finish">Finish</b><small></small><div class="bar"><i></i></div></div></li>
+    </ul>
+
+    <div id="resultBox" class="result hidden" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- Advanced -->
+  <details class="card slim">
+    <summary data-i18n="adv.title">Advanced</summary>
+    <div class="advgrid">
+      <label class="chk"><input type="checkbox" id="chkAutoJump" checked> <span data-i18n="adv.autoJump">Restart the controller automatically when done</span></label>
+      <p class="muted small"><span data-i18n="adv.nextBoot">Next system firmware to be used:</span> <b id="pingpongNext">B1</b>
+        <button id="btnTogglePingpong" class="btn tiny ghost" data-i18n="btn.switch">switch</button></p>
+      <p class="muted small" data-i18n="adv.history">Previous updates on this device:</p>
+      <div id="historyBox" class="history"></div>
+    </div>
+  </details>
+
+  <!-- Log -->
+  <details class="card slim" id="logCard">
+    <summary data-i18n="log.title">Technical log</summary>
+    <div class="row gap">
+      <button id="btnCopyLog" class="btn tiny ghost" data-i18n="btn.copy">Copy</button>
+      <button id="btnSaveLog" class="btn tiny ghost" data-i18n="btn.save">Save</button>
+      <button id="btnClearLog" class="btn tiny ghost" data-i18n="btn.clear">Clear</button>
+    </div>
+    <pre id="log" class="log" dir="ltr"></pre>
+  </details>
+
+  <footer class="foot">
+    <span id="verInfo">GATA Cloud Uploader</span> ·
+    <span id="capsInfo"></span>
+  </footer>
+</main>
+
+<!-- Settings dialog -->
+<dialog id="dlgSettings">
+  <h2 data-i18n="settings.title">Settings</h2>
+  <label class="field"><span data-i18n="settings.lang">Language</span>
+    <select id="selLangDlg">
+      <option value="en">English</option>
+      <option value="ar">العربية</option>
+      <option value="tr">Türkçe</option>
+    </select>
+  </label>
+  <label class="field"><span data-i18n="settings.url">Firmware server (manifest URL)</span>
+    <input type="url" id="inManifestUrl" placeholder="firmware/manifest.json">
+  </label>
+  <label class="chk"><input type="checkbox" id="chkDemo"> <span data-i18n="settings.demo">Demo mode (simulated device, for trying the app)</span></label>
+  <label class="chk indent"><input type="checkbox" id="chkDemoEsp" checked> <span data-i18n="settings.demoEsp">Simulated board has an ESP32</span></label>
+  <div class="row gap">
+    <button id="btnClearCache" class="btn ghost" data-i18n="btn.clearCache">Clear downloaded firmware cache</button>
+  </div>
+  <div class="row gap right">
+    <button id="btnSettingsClose" class="btn primary" data-i18n="btn.done">Done</button>
+  </div>
+</dialog>
+
+<script src="js/config.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/util.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/dfuse.js"></script>
+<script src="js/transport.js"></script>
+<script src="js/gata.js"></script>
+<script src="js/esp.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/localsource.js"></script>
+<script src="js/mock.js"></script>
+<script src="js/flows.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

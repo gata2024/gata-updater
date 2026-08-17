@@ -138,6 +138,27 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* ------------------------------------------------- customer channel */
+    {
+      const orig = APP_CONFIG.channel;
+      try {
+        APP_CONFIG.channel = "acme";
+        let threw = false;
+        try { Cloud._requireOwnChannel({ channel: "acme" }, "t"); } catch (e) { threw = true; }
+        this.check("channel: this customer's own list accepted", !threw);
+
+        threw = false; let fatal = false;
+        try { Cloud._requireOwnChannel({ channel: "other-co" }, "t"); }
+        catch (e) { threw = true; fatal = !!e.fatal; }
+        this.check("channel: another customer's list refused, and fatally", threw && fatal);
+
+        APP_CONFIG.channel = "default";
+        threw = false;
+        try { Cloud._requireOwnChannel({}, "t"); } catch (e) { threw = true; }
+        this.check("channel: list without a channel accepted by the shared app", !threw);
+      } finally { APP_CONFIG.channel = orig; }
+    }
+
     /* ------------------------------------------------- transport choice */
     {
       const orig = Transport.isAndroid;

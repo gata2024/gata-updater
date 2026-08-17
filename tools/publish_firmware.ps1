@@ -22,6 +22,11 @@ param(
     [switch]$NoEsp,
     [string]$Notes = "",
     [string]$Date = (Get-Date -Format "yyyy-MM-dd"),
+    # Which customer channel to publish into. "default" is the shared channel
+    # at firmware\manifest.json; any other id publishes to
+    # firmware\customers\<id>\manifest.json. Binaries always live once at the
+    # root of firmware\ and are shared by every channel.
+    [string]$Customer = "default",
     [string]$FirmwareDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "firmware")
 )
 
@@ -58,6 +63,9 @@ function Test-Image([string]$path, [string]$kind) {
 }
 
 function New-FileEntry([string]$srcPath, [string]$relUrl) {
+    # $relUrl is the path under firmware\ (shared by all channels); the URL
+    # written into a customer manifest gets $script:UrlPrefix prepended so it
+    # still resolves from customers\<id>\.
     $dest = Join-Path $FirmwareDir ($relUrl -replace "/", "\")
     $destDir = Split-Path -Parent $dest
     if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force $destDir | Out-Null }
@@ -71,16 +79,29 @@ function New-FileEntry([string]$srcPath, [string]$relUrl) {
         }
     }
     $f = Get-Item $dest
-    return [ordered]@{ url = $relUrl; size = [int]$f.Length; sha256 = (Get-Sha256 $dest) }
+    return [ordered]@{ url = ($script:UrlPrefix + $relUrl); size = [int]$f.Length; sha256 = (Get-Sha256 $dest) }
 }
 
 # ---------------------------------------------------------------- validate
-Write-Host "== GATA firmware release: $Version ==" -ForegroundColor Cyan
+Write-Host "== GATA firmware release: $Version  (channel: $Customer) ==" -ForegroundColor Cyan
 if (-not (Test-Path $Main)) { throw "Main application not found: $Main" }
 Test-Image $Main "app"
 
-$manifestPath = Join-Path $FirmwareDir "manifest.json"
-if (-not (Test-Path $manifestPath)) { throw "manifest.json not found in $FirmwareDir" }
+if ($Customer -and $Customer -ne "default") {
+    if ($Customer -notmatch '^[a-z0-9][a-z0-9-]{1,30}$') {
+        throw "Customer id must be lowercase letters, digits and dashes: '$Customer'"
+    }
+    $manifestPath = Join-Path $FirmwareDir "customers\$Customer\manifest.json"
+    $script:UrlPrefix = "../../"          # customers\<id>\ -> firmware\ root
+    if (-not (Test-Path $manifestPath)) {
+        throw "Channel '$Customer' does not exist yet. Create it first:`n" +
+              "    .\new_customer.ps1 -Id $Customer -Name ""<company name>"""
+    }
+} else {
+    $manifestPath = Join-Path $FirmwareDir "manifest.json"
+    $script:UrlPrefix = ""
+}
+if (-not (Test-Path $manifestPath)) { throw "manifest.json not found: $manifestPath" }
 $manifest = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($manifest.versions | Where-Object { $_.version -eq $Version }) {
     throw "Version $Version already exists in the manifest."
@@ -147,6 +168,8 @@ foreach ($old in $manifest.versions) {
 
 $out = [ordered]@{
     product  = $manifest.product
+    channel  = $Customer                       # signed: an app only accepts ITS channel
+    customer = $(if ($manifest.PSObject.Properties["customer"]) { $manifest.customer } else { "" })
     updated  = $Date
     versions = @($newVersion) + @($manifest.versions)
 }
