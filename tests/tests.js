@@ -180,8 +180,21 @@ const T = {
       const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
       this.check("gate: connects from a button click, never from pointerdown",
-        /btn\.onclick\s*=\s*run\(action\)/.test(gate) &&
+        /btn\.onclick\s*=/.test(gate) && /run\(fn\)\(\)/.test(gate) &&
         !/addEventListener\("pointerdown"/.test(gate));
+    }
+
+    /* ------------------------------ the connect gate is ONE plain button */
+    {
+      const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
+      this.check("gate: exactly one button, always the same label",
+        /btn\.textContent\s*=\s*I18N\.t\("btn\.connect"\)/.test(gate) &&
+        /btnAlt\.classList\.add\("hidden"\)/.test(gate));
+      this.check("gate: no paragraph above the button",
+        /gateText"\)\.textContent\s*=\s*""/.test(gate));
+      this.check("gate: that one button covers BOOT mode too",
+        /ways\[attempt % ways\.length\]/.test(gate));
     }
 
     /* ------------------------------------- gate buttons stay answerable */
