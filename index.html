@@ -70,11 +70,17 @@
     </div>
     <ol class="prep">
       <li id="prepConnect" data-i18n="prep.1.pc">Connect the controller to this computer with a USB cable.</li>
-      <li data-i18n-html="prep.2">Press and <b>hold the BOOT button</b>.</li>
-      <li data-i18n-html="prep.3">Press and <b>release RESET</b>, then release BOOT.</li>
+      <li data-i18n="prep.2.only">That is all — the updater puts the controller into update mode by itself.</li>
     </ol>
     <p class="muted small" data-i18n="prep.note">The screen of the controller stays off in update mode — that is normal.</p>
     <p class="muted small" data-i18n="prep.note2">First time on a new computer or phone, the app asks you to pick the USB device from a list — just follow the on-screen prompts.</p>
+    <details class="picky">
+      <summary data-i18n="prep.oldTitle">Controller with very old software?</summary>
+      <ol class="prep">
+        <li data-i18n-html="prep.2">Press and <b>hold the BOOT button</b>.</li>
+        <li data-i18n-html="prep.3">Press and <b>release RESET</b>, then release BOOT.</li>
+      </ol>
+    </details>
   </section>
 
   <!-- STEP 3 : update -->
@@ -85,19 +91,29 @@
     </div>
 
     <div class="actions">
-      <button id="btnUpdCtrl" class="btn action">
-        <span class="acticon ctrl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H4zM2 17h20v2H2z"/></svg></span>
-        <span class="actwords"><b data-i18n="btn.updCtrl">Update controller</b><small data-i18n="btn.updCtrlDesc">System firmware + controller software (ESP32 untouched)</small></span>
-      </button>
-      <button id="btnUpdCloud" class="btn action">
-        <span class="acticon cloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 18H7a5 5 0 1 1 .8-9.9A7 7 0 0 1 21 10a4 4 0 0 1-2 8z"/></svg></span>
-        <span class="actwords"><b data-i18n="btn.updCloud">Update cloud module (ESP32)</b><small data-i18n="btn.updCloudDesc">Only the ESP32 cloud firmware — the controller software is kept</small></span>
-      </button>
-      <button id="btnUpdBoth" class="btn action prime">
+      <button id="btnUpdateNow" class="btn action prime one">
         <span class="acticon both"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg></span>
-        <span class="actwords"><b data-i18n="btn.updBoth">Update controller + cloud</b><small data-i18n="btn.updBothDesc">Everything: system firmware, controller software and ESP32</small></span>
+        <span class="actwords"><b data-i18n="btn.updateNow">UPDATE</b><small data-i18n="btn.updateNowDesc">Installs the newest software. Everything else happens by itself.</small></span>
       </button>
     </div>
+
+    <details class="picky">
+      <summary data-i18n="btn.otherOptions">Other options</summary>
+      <div class="actions">
+        <button id="btnUpdCtrl" class="btn action">
+          <span class="acticon ctrl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H4zM2 17h20v2H2z"/></svg></span>
+          <span class="actwords"><b data-i18n="btn.updCtrl">Update controller</b><small data-i18n="btn.updCtrlDesc">System firmware + controller software (ESP32 untouched)</small></span>
+        </button>
+        <button id="btnUpdCloud" class="btn action">
+          <span class="acticon cloud"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 18H7a5 5 0 1 1 .8-9.9A7 7 0 0 1 21 10a4 4 0 0 1-2 8z"/></svg></span>
+          <span class="actwords"><b data-i18n="btn.updCloud">Update cloud module (ESP32)</b><small data-i18n="btn.updCloudDesc">Only the ESP32 cloud firmware — the controller software is kept</small></span>
+        </button>
+        <button id="btnUpdBoth" class="btn action">
+          <span class="acticon both"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg></span>
+          <span class="actwords"><b data-i18n="btn.updBoth">Update controller + cloud</b><small data-i18n="btn.updBothDesc">Everything: system firmware, controller software and ESP32</small></span>
+        </button>
+      </div>
+    </details>
     <div class="row center gap">
       <button id="btnCancel" class="btn danger hidden" data-i18n="btn.cancel">Cancel</button>
     </div>

@@ -377,8 +377,9 @@ const App = {
   setBusy(b) {
     this.busy = b;
     this.$("btnCancel").classList.toggle("hidden", !b);
-    for (const id of ["btnUpdCtrl", "btnUpdCloud", "btnUpdBoth", "btnRefresh", "btnRescan"]) {
-      this.$(id).disabled = b;
+    for (const id of ["btnUpdateNow", "btnUpdCtrl", "btnUpdCloud", "btnUpdBoth", "btnRefresh", "btnRescan"]) {
+      const el = this.$(id);
+      if (el) el.disabled = b;
     }
     if (!b && this._pendingReload) {
       this._pendingReload = false;
@@ -504,6 +505,9 @@ const App = {
   },
 
   wireEvents() {
+    /* The one button everybody uses: newest software, everything the board
+     * has. "both" already skips the ESP32 by itself when none is fitted. */
+    this.$("btnUpdateNow").onclick = () => this.onUpdate("both");
     this.$("btnUpdCtrl").onclick = () => this.onUpdate("controller");
     this.$("btnUpdCloud").onclick = () => this.onUpdate("cloud");
     this.$("btnUpdBoth").onclick = () => this.onUpdate("both");

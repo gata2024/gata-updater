@@ -281,3 +281,13 @@ dialog .chk { margin-bottom: 10px; }
 .log { text-align: left; }
 [dir="rtl"] .verrow .vnotes,
 [dir="rtl"] .verrow .vname { text-align: start; }
+
+/* The single update button - deliberately the biggest thing on the page. */
+.btn.action.one { padding: 22px 20px; }
+.btn.action.one .actwords b { font-size: 1.35rem; letter-spacing: .04em; }
+details.picky { margin-top: 10px; }
+details.picky > summary {
+  cursor: pointer; color: var(--muted, #8aa); font-size: .9rem;
+  padding: 6px 2px; list-style: revert;
+}
+details.picky[open] > summary { margin-bottom: 8px; }
