@@ -252,19 +252,14 @@ const Flows = {
       Util.info("No ack seen (board may have reset mid-reply) - checking who owns the port now...");
     }
 
-    await Util.sleep(2500);                        // board reboots into the window
+    /* The controller is back on the bus about 3-4 s after the command, so look
+     * early and often instead of waiting in long steps - the reconnect should
+     * feel immediate, with nothing to read. */
+    await Util.sleep(1200);
     let appSeenAgain = 0;
-    /* Phones need longer: some end the USB-OTG session when the attached
-     * device restarts and only rescan when the cable is touched, so wait
-     * generously and say what to do rather than failing over to BOOT mode. */
-    const tries = Transport.isAndroid() ? 22 : 10;
+    const tries = Transport.isAndroid() ? 30 : 16;
     for (let i = 0; i < tries; i++) {
       this._ck();
-      if (i === 6 && Transport.isAndroid()) {
-        Util.warn("The controller restarted but has not reappeared yet — unplug and re-plug the USB cable. " +
-                  "It stays in update mode and waits, so there is no rush.");
-        step("connect", "active", I18N.t("d.replug"), null);
-      }
       const t2 = await Transport.reconnect();
       if (t2) {
         let opened = false;
@@ -308,7 +303,7 @@ const Flows = {
           if (opened) { try { await t2.close(); } catch (e2) { /* ignore */ } }
         }
       }
-      await Util.sleep(1200);
+      await Util.sleep(600);   // look again quickly - the board is only ~4 s away
     }
 
     /* We reached the running application and told it to restart. Whether or

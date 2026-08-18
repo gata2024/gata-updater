@@ -335,8 +335,7 @@ const App = {
          * tap did nothing AND said nothing - looking exactly like a broken
          * app. Guard with a flag instead, so every tap gets an answer. */
         if (asking) {
-          Util.warn("Still waiting for the device list to open. If nothing appeared: " +
-                    "unplug and re-plug the USB cable, then press again.");
+          Util.warn("Still waiting for the device list to open — touch again.");
           return;
         }
         asking = true;
