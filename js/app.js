@@ -368,17 +368,24 @@ const App = {
        * real touch, so ANY touch on the page opens it. Successive touches
        * alternate between the two ways a controller can appear (running, or
        * held in BOOT mode), so nothing has to be chosen or explained. */
+      /* MUST be "click": a browser grants permission to open a device chooser
+       * only on a COMPLETED tap. pointerdown/touchstart fire too early and the
+       * request is refused with "Must be handling a user gesture". */
       const actions = alt ? [action, alt.action] : [action];
       let next = 0;
       const onTouch = ev => {
         // let real controls (Cancel, language, settings) work normally
         if (ev.target.closest && ev.target.closest("button, a, select, summary, input")) return;
         const fn = actions[next % actions.length];
+        if (actions.length > 1) {
+          Util.info(next % actions.length === 0
+            ? "Looking for a running controller…" : "Looking for a controller in BOOT mode…");
+        }
         next++;
         run(fn)();
       };
-      document.addEventListener("pointerdown", onTouch, true);
-      const stopTouch = () => document.removeEventListener("pointerdown", onTouch, true);
+      document.addEventListener("click", onTouch, true);
+      const stopTouch = () => document.removeEventListener("click", onTouch, true);
       const origFinish = finish;
       finish = (ok, value) => { stopTouch(); origFinish(ok, value); };
 

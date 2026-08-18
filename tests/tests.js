@@ -139,6 +139,17 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* --------------------------- the connect gesture must be a real tap */
+    {
+      /* Chrome refuses requestDevice() from pointerdown/touchstart ("Must be
+       * handling a user gesture"); only a COMPLETED tap counts. */
+      const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
+      this.check("gate: connects on a completed tap (click), not pointerdown",
+        /addEventListener\("click", onTouch, true\)/.test(gate) &&
+        !/addEventListener\("pointerdown"/.test(gate));
+    }
+
     /* ------------------------------------- gate buttons stay answerable */
     {
       /* A disabled button does not fire its handler, so a device chooser that

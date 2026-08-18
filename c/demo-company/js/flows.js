@@ -311,11 +311,14 @@ const Flows = {
       await Util.sleep(1200);
     }
 
-    /* The controller ACKNOWLEDGED the command, so it IS in update mode - it
-     * just is not visible to this browser yet (a phone that dropped the USB
-     * session, or a permission that does not survive the re-enumeration).
-     * Asking for it by name is right; falling back to BOOT mode is not. */
-    if (acked) {
+    /* We reached the running application and told it to restart. Whether or
+     * not its acknowledgement survived the disconnect, the controller is in
+     * update mode now - it is simply not visible to this browser yet (a phone
+     * that dropped the USB session, or a permission that did not survive the
+     * re-enumeration). Keep asking for it; BOOT mode would be wrong advice
+     * and cannot help. Firmware that truly lacks the command has already
+     * returned above, after three ignored attempts. */
+    {
       try {
         const t3 = await ctx.ui.userGate(I18N.t("gate.run.btn"), I18N.t("gate.replug.text"),
           async () => await Transport.request(), null,
