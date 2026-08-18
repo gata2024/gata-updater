@@ -50,6 +50,14 @@ const Validate = {
    * pkg = { controller, system, esp:{bootloader,partitions,boot_app0,firmware}|null }
    * needs = { controller: bool, system: bool, esp: bool } - what this run uses. */
   checkPackage(pkg, needs) {
+    /* A misspelt or renamed key would silently fall back to its default and
+     * demand (or skip) the wrong file - that is how "update cloud module"
+     * once started asking for a controller image it never downloads. */
+    for (const k of Object.keys(needs || {})) {
+      if (!["controller", "system", "esp"].includes(k)) {
+        throw new UploaderError("Internal error: unknown package requirement '" + k + "'.");
+      }
+    }
     const n = Object.assign({ controller: true, system: true, esp: false }, needs || {});
     const bad = (key, fname) => {
       throw new UploaderError(I18N.t(key, { f: fname }), I18N.t("hint.retry"));

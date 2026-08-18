@@ -314,6 +314,11 @@ const Cloud = {
    * needs = { controller: bool, system: bool, esp: "no"|"optional"|"required" }
    * Returns { controller, system, esp: {bootloader,partitions,boot_app0,firmware}|null } */
   async downloadPackage(manifest, ver, onProgress, needs) {
+    for (const k of Object.keys(needs || {})) {
+      if (!["controller", "system", "esp"].includes(k)) {
+        throw new UploaderError("Internal error: unknown download requirement '" + k + "'.");
+      }
+    }
     const n = Object.assign({ controller: true, system: true, esp: "optional" }, needs || {});
     const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
     const pkg = { controller: null, system: null, esp: null };

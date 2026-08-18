@@ -468,9 +468,12 @@ const Flows = {
     let ok = false;
 
     try {
+      /* The key names must match validate.js exactly: an unknown key silently
+       * falls back to its default (true), which made "update cloud module"
+       * demand a controller file it deliberately never downloads. */
       Validate.checkPackage(ctx.pkg, {
-        main: mode !== "cloud",
-        system: true,                 // B1/B3 always present (DFU fallback)
+        controller: mode !== "cloud",
+        system: true,                 // system firmware is always in the package
         esp: mode === "cloud",
       });
       await this._acquireWakeLock();

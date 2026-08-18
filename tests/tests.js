@@ -139,6 +139,40 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* ------------------------ every mode validates what it downloads */
+    {
+      // "update cloud module" downloads NO controller image on purpose; the
+      // validator must not demand one (this broke that mode once).
+      const app = new Uint8Array(64);
+      new DataView(app.buffer).setUint32(0, 0x24080000, true);
+      new DataView(app.buffer).setUint32(4, 0x90000135, true);
+      const sys = new Uint8Array(64);
+      new DataView(sys.buffer).setUint32(0, 0x20020000, true);
+      new DataView(sys.buffer).setUint32(4, 0x08000299, true);
+      const espImg = () => { const a = new Uint8Array(64); a[0] = 0xE9; return a; };
+      const espSet = { bootloader: espImg(),
+                       partitions: (() => { const a = new Uint8Array(64); a[0] = 0xAA; a[1] = 0x50; return a; })(),
+                       boot_app0: new Uint8Array(64),
+                       firmware: espImg() };
+      const modes = {
+        controller: { pkg: { controller: app, system: sys, esp: null },
+                      needs: { controller: true, system: true, esp: false } },
+        cloud:      { pkg: { controller: null, system: sys, esp: espSet },
+                      needs: { controller: false, system: true, esp: true } },
+        both:       { pkg: { controller: app, system: sys, esp: espSet },
+                      needs: { controller: true, system: true, esp: true } },
+      };
+      for (const [name, m] of Object.entries(modes)) {
+        let threw = null;
+        try { Validate.checkPackage(m.pkg, m.needs); } catch (e) { threw = e.message; }
+        this.check("package: '" + name + "' mode validates its own files", threw === null, threw);
+      }
+      let unknownRejected = false;
+      try { Validate.checkPackage(modes.both.pkg, { main: true }); }
+      catch (e) { unknownRejected = /unknown package requirement/.test(e.message); }
+      this.check("package: a renamed/misspelt requirement fails loudly", unknownRejected);
+    }
+
     /* --------------------------- the connect gesture must be a real tap */
     {
       /* Chrome refuses requestDevice() from pointerdown/touchstart ("Must be
