@@ -28,8 +28,8 @@ const I18N = {
       "local.espComplete": "complete (4 files)",
       "local.espFwOnly": "firmware.bin only (needs an already-programmed ESP32)",
       "local.noMain": "No controller software (M*.bin) found in the main_firmware folder.",
-      "local.noBoot": "B1.bin / B3.bin not found in the main_firmware folder.",
-      "local.hintFiles": "Put the files inside the uploader folder like this: main_firmware\\B1.bin, B3.bin and M*.bin — cloud_firmware\\bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin. Then press “Scan again”.",
+      "local.noBoot": "No system firmware (system*.bin) found in the main_firmware folder.",
+      "local.hintFiles": "Put the files inside the uploader folder like this: main_firmware\system_<version>.bin + controller_<version>.bin — cloud_firmware\\bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin. Then press “Scan again”.",
       "local.oldServer": "The folder contents could not be listed — the local server running is an old version. Close its black window, double-click CLICK_ME_START_ON_PC.bat again, then press “Scan again”.",
       "opt": "(optional)",
 
@@ -172,7 +172,7 @@ const I18N = {
       "hint.channel": "Use the updater package supplied for your company, or contact GATA support.",
       "err.sigBad": "SECURITY: the firmware list signature is INVALID - this content is not from GATA. Refusing to use it.",
       "hint.sig": "If you just published a release yourself, sign it: publish_firmware.ps1 signs automatically (after the one-time tools\\make_signing_key.ps1), and manifest.json.sig must be uploaded next to manifest.json.",
-      "hint.pickBoth": "Pick both B1.bin and B3.bin, or use the cloud package.",
+      "hint.pickBoth": "Add the system firmware (system*.bin) to the folder, or use the cloud package.",
       "hint.portBusy": "Close any other program using the port, unplug/replug the USB cable, then retry.",
       "err.cancelled": "Update cancelled by the user.",
 
@@ -207,8 +207,8 @@ const I18N = {
       "local.espComplete": "كاملة (4 ملفات)",
       "local.espFwOnly": "firmware.bin فقط (يتطلب ESP32 مبرمجًا مسبقًا)",
       "local.noMain": "لا يوجد برنامج وحدة تحكم (M*.bin) في مجلد main_firmware.",
-      "local.noBoot": "لم يتم العثور على B1.bin / B3.bin في مجلد main_firmware.",
-      "local.hintFiles": "ضع الملفات داخل مجلد المحدّث هكذا: main_firmware\\B1.bin و B3.bin و M*.bin — cloud_firmware\\bootloader.bin و partitions.bin و boot_app0.bin و firmware.bin. ثم اضغط «إعادة الفحص».",
+      "local.noBoot": "لم يتم العثور على برنامج النظام (system*.bin) في مجلد main_firmware.",
+      "local.hintFiles": "ضع الملفات داخل مجلد المحدّث هكذا: main_firmware\system_<version>.bin + controller_<version>.bin — cloud_firmware\\bootloader.bin و partitions.bin و boot_app0.bin و firmware.bin. ثم اضغط «إعادة الفحص».",
       "local.oldServer": "تعذّر عرض محتويات المجلد — خادم التشغيل المحلي الحالي إصدار قديم. أغلق نافذته السوداء، شغّل CLICK_ME_START_ON_PC.bat مرة أخرى، ثم اضغط «إعادة الفحص».",
       "opt": "(اختياري)",
 
@@ -351,7 +351,7 @@ const I18N = {
       "hint.channel": "استخدم نسخة التحديث المخصصة لشركتك، أو تواصل مع دعم GATA.",
       "err.sigBad": "أمان: توقيع قائمة البرامج غير صحيح - هذا المحتوى ليس من GATA. تم رفض استخدامه.",
       "hint.sig": "إذا كنت أنت من نشر الإصدار، وقّعه: publish_firmware.ps1 يوقّع تلقائياً (بعد تشغيل make_signing_key.ps1 مرة واحدة)، ويجب رفع manifest.json.sig بجوار manifest.json.",
-      "hint.pickBoth": "اختر الملفين B1.bin و B3.bin معًا، أو استخدم حزمة السحابة.",
+      "hint.pickBoth": "أضف برنامج النظام (system*.bin) إلى المجلد، أو استخدم حزمة السحابة.",
       "hint.portBusy": "أغلق أي برنامج آخر يستخدم المنفذ، افصل ثم أعد توصيل كابل USB، وحاول مجددًا.",
       "err.cancelled": "ألغى المستخدم التحديث.",
 
@@ -386,8 +386,8 @@ const I18N = {
       "local.espComplete": "tam (4 dosya)",
       "local.espFwOnly": "yalnızca firmware.bin (önceden programlanmış ESP32 gerektirir)",
       "local.noMain": "main_firmware klasöründe kontrol ünitesi yazılımı (M*.bin) yok.",
-      "local.noBoot": "main_firmware klasöründe B1.bin / B3.bin bulunamadı.",
-      "local.hintFiles": "Dosyaları yükleyici klasörünün içine şöyle yerleştirin: main_firmware\\B1.bin, B3.bin ve M*.bin — cloud_firmware\\bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin. Sonra “Yeniden tara”ya basın.",
+      "local.noBoot": "main_firmware klasöründe sistem yazılımı (system*.bin) bulunamadı.",
+      "local.hintFiles": "Dosyaları yükleyici klasörünün içine şöyle yerleştirin: main_firmware\system_<version>.bin + controller_<version>.bin — cloud_firmware\\bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin. Sonra “Yeniden tara”ya basın.",
       "local.oldServer": "Klasör içeriği listelenemedi — çalışan yerel sunucu eski sürüm. Siyah penceresini kapatın, CLICK_ME_START_ON_PC.bat dosyasını yeniden çalıştırın, sonra “Yeniden tara”ya basın.",
       "opt": "(isteğe bağlı)",
 
@@ -530,7 +530,7 @@ const I18N = {
       "hint.channel": "Şirketiniz için verilen güncelleyici paketini kullanın veya GATA desteğine başvurun.",
       "err.sigBad": "GÜVENLİK: yazılım listesi imzası GEÇERSİZ - bu içerik GATA'dan değil. Kullanılması reddedildi.",
       "hint.sig": "Yayını siz yaptıysanız imzalayın: publish_firmware.ps1 otomatik imzalar (bir kez make_signing_key.ps1 çalıştırıldıktan sonra) ve manifest.json.sig dosyası manifest.json'un yanına yüklenmelidir.",
-      "hint.pickBoth": "B1.bin ve B3.bin dosyalarının ikisini de seçin veya bulut paketini kullanın.",
+      "hint.pickBoth": "Sistem yazılımını (system*.bin) klasöre ekleyin veya bulut paketini kullanın.",
       "hint.portBusy": "Portu kullanan diğer programları kapatın, USB kablosunu çıkarıp takın ve tekrar deneyin.",
       "err.cancelled": "Güncelleme kullanıcı tarafından iptal edildi.",
 

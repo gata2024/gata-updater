@@ -11,8 +11,8 @@
  *   "product": "GATA Controller",
  *   "versions": [{
  *     "version": "15.4.26", "date": "2026-04-15", "notes": "…", "latest": true,
- *     "main":        { "url": "M_15_4_26.bin", "sha256": "…", "size": 296368 },
- *     "bootloaders": { "b1": {…}, "b3": {…} },
+ *     "controller":  { "url": "controller_18_8_27.bin", "sha256": "…", "size": … },
+ *     "system":      { "url": "system_18_8_27.bin",     "sha256": "…", "size": … },
  *     "esp": { "bootloader": {…}, "partitions": {…}, "boot_app0": {…}, "firmware": {…} }
  *   }]
  * }
@@ -165,9 +165,11 @@ const Cloud = {
     m.versions.forEach((v, i) => {
       const where = "versions[" + i + "]";
       if (!v.version) throw new UploaderError("Manifest error: " + where + " has no \"version\".");
-      if (!v.main || !v.main.url) throw new UploaderError("Manifest error: " + where + " has no main.url.");
-      if (v.bootloaders && (!v.bootloaders.b1 || !v.bootloaders.b3)) {
-        throw new UploaderError("Manifest error: " + where + " must list BOTH bootloaders.b1 and b3.");
+      if (!this.controllerEntry(v) || !this.controllerEntry(v).url) {
+        throw new UploaderError("Manifest error: " + where + " has no controller software file.");
+      }
+      if (!this.systemEntry(v) || !this.systemEntry(v).url) {
+        throw new UploaderError("Manifest error: " + where + " has no system firmware file.");
       }
       if (v.esp && !v.esp.firmware) {
         throw new UploaderError("Manifest error: " + where + ".esp needs at least esp.firmware.");
@@ -296,27 +298,37 @@ const Cloud = {
     return bytes;
   },
 
-  /* Download what one version needs for the chosen action.
-   * needs = { main: bool, boot: bool, esp: "no" | "optional" | "required" }
-   * Returns { main, b1, b3, esp: {bootloader,partitions,boot_app0,firmware} | null } */
-  async downloadPackage(manifest, ver, onProgress, needs) {
-    const n = Object.assign({ main: true, boot: true, esp: "optional" }, needs || {});
-    const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
-    const pkg = { main: null, b1: null, b3: null, esp: null };
+  /* The two controller files a version can carry. Releases published before
+   * the naming was cleaned up call them "main" and "bootloaders.b1/.b3" (two
+   * builds of the same system firmware that only differed by a version number,
+   * flashed alternately to force the old update window). Both spellings are
+   * accepted so older releases keep installing. */
+  controllerEntry(ver) { return ver.controller || ver.main || null; },
+  systemEntry(ver) {
+    if (ver.system) return ver.system;
+    if (ver.bootloaders) return ver.bootloaders.b1 || ver.bootloaders.b3 || null;
+    return null;
+  },
 
-    if (n.main) {
-      if (!ver.main || !ver.main.url) throw new UploaderError("This version has no main application file.");
-      pkg.main = await this.download(manifest, ver.main, "Application (" + ver.main.url + ")",
-        f => report("Application", f));
+  /* Download what one version needs for the chosen action.
+   * needs = { controller: bool, system: bool, esp: "no"|"optional"|"required" }
+   * Returns { controller, system, esp: {bootloader,partitions,boot_app0,firmware}|null } */
+  async downloadPackage(manifest, ver, onProgress, needs) {
+    const n = Object.assign({ controller: true, system: true, esp: "optional" }, needs || {});
+    const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
+    const pkg = { controller: null, system: null, esp: null };
+
+    if (n.controller) {
+      const entry = this.controllerEntry(ver);
+      if (!entry || !entry.url) throw new UploaderError("This version has no controller software file.");
+      pkg.controller = await this.download(manifest, entry, "Controller software (" + entry.url + ")",
+        f => report("Controller software", f));
     }
 
-    if (n.boot) {
-      if (ver.bootloaders && ver.bootloaders.b1 && ver.bootloaders.b3) {
-        pkg.b1 = await this.download(manifest, ver.bootloaders.b1, "System firmware B1", f => report("System B1", f));
-        pkg.b3 = await this.download(manifest, ver.bootloaders.b3, "System firmware B3", f => report("System B3", f));
-      } else {
-        throw new UploaderError("This version is missing the B1/B3 system firmware files.");
-      }
+    if (n.system) {
+      const entry = this.systemEntry(ver);
+      if (!entry || !entry.url) throw new UploaderError("This version has no system firmware file.");
+      pkg.system = await this.download(manifest, entry, "System firmware", f => report("System firmware", f));
     }
 
     if (n.esp !== "no") {
@@ -336,14 +348,7 @@ const Cloud = {
   }
 };
 
-/* B1/B3 ping-pong (same idea as .last_bootloader.txt next to the Python tool):
- * the bootloader only opens its update window when the freshly flashed system
- * firmware has a DIFFERENT version than the one stored in the RTC backup
- * register - so we alternate between the two builds on every update. */
-const PingPong = {
-  next() {
-    const last = localStorage.getItem("gata.lastBootloader");
-    return last === "B1" ? "B3" : "B1";     // first run -> B1, like the Python tool
-  },
-  commit(name) { localStorage.setItem("gata.lastBootloader", name); },
-};
+/* The alternating B1/B3 ping-pong is gone: the controller is asked to enter
+ * update mode (backup register 30), and system firmware from 18.8.27 on comes
+ * as ONE image. Only this cleanup of the old bookkeeping remains. */
+try { localStorage.removeItem("gata.lastBootloader"); } catch (e) { /* private mode */ }

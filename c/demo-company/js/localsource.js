@@ -3,8 +3,8 @@
  * Works like the original USB_Uploder: the firmware files sit in the uploader
  * folder and are discovered automatically - no file picking. Layout:
  *
- *   main_firmware/B1.bin, B3.bin      system firmware pair (ping-pong)
- *   main_firmware/M*.bin              controller application (any M... name)
+ *   main_firmware/system*.bin         system firmware (legacy: B1.bin / B3.bin)
+ *   main_firmware/controller*.bin     controller software (legacy: M*.bin)
  *   cloud_firmware/bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin
  *
  * Discovery uses the local server's /__local_list endpoint (started by
@@ -21,13 +21,15 @@ const LocalSource = {
   _url(p) { return this.BASE + p; },
   _asArray(x) { return Array.isArray(x) ? x : (x ? [x] : []); },
 
-  /* Pure name-matching (also exercised by the self tests). */
+  /* Pure name-matching (also exercised by the self tests). Current names are
+   * system*.bin and controller*.bin; B1/B3 and M*.bin are the old names and
+   * are still accepted so existing uploader folders keep working. */
   matchNames(mainNames, cloudNames) {
     const ci = (arr, re) => arr.find(n => re.test(n)) || null;
-    const mains = mainNames.filter(n => /^m.*\.bin$/i.test(n));
+    const mains = mainNames.filter(n => /^(controller|m).*\.bin$/i.test(n) &&
+                                        !/^system.*\.bin$/i.test(n));
     return {
-      b1: ci(mainNames, /^b1\.bin$/i),
-      b3: ci(mainNames, /^b3\.bin$/i),
+      system: ci(mainNames, /^system.*\.bin$/i) || ci(mainNames, /^b1\.bin$/i) || ci(mainNames, /^b3\.bin$/i),
       mains,
       esp: {
         bootloader: ci(cloudNames, /^bootloader\.bin$/i),
@@ -61,7 +63,7 @@ const LocalSource = {
 
     if (!mainEntries) {
       mainEntries = [];
-      for (const name of ["B1.bin", "B3.bin", "M.bin"]) {
+      for (const name of ["system.bin", "controller.bin", "B1.bin", "B3.bin", "M.bin"]) {
         if (await this._exists(this._url(this.MAIN_DIR + "/" + name))) mainEntries.push({ name, size: 0 });
       }
       cloudEntries = [];
@@ -75,14 +77,14 @@ const LocalSource = {
     for (const e of mainEntries) sizeOf[e.name] = e.size;
     const found = {
       viaListing,
-      b1: m.b1, b3: m.b3,
+      system: m.system,
       mains: m.mains.map(name => ({ name, size: sizeOf[name] || 0 })),
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
     };
     Util.info("Local folder scan (" + (viaListing ? "listing" : "name probe") + "): " +
-      "B1=" + !!found.b1 + " B3=" + !!found.b3 +
-      " M=[" + found.mains.map(x => x.name).join(", ") + "]" +
+      "system=" + (found.system || "none") +
+      " controller=[" + found.mains.map(x => x.name).join(", ") + "]" +
       " cloud=" + (found.espComplete ? "complete" : (m.esp.firmware ? "firmware-only" : "none")));
     return found;
   },
@@ -102,28 +104,27 @@ const LocalSource = {
   },
 
   /* Load the files a given action needs.
-   * needs = { main, boot, esp: "no"|"optional"|"required" }, mainName = chosen M file. */
+   * needs = { controller, system, esp: "no"|"optional"|"required" };
+   * mainName = the chosen controller file. */
   async load(found, needs, mainName, onProgress) {
     const report = (name, f) => { if (onProgress) onProgress(name, f); };
-    const pkg = { main: null, b1: null, b3: null, esp: null };
+    const pkg = { controller: null, system: null, esp: null };
 
-    if (needs.main) {
+    if (needs.controller) {
       const chosen = mainName || (found.mains[0] && found.mains[0].name);
       if (!chosen) {
         throw new UploaderError(I18N.t("local.noMain"), I18N.t("local.hintFiles"));
       }
-      pkg.main = await this._fetchBin(this._url(this.MAIN_DIR + "/" + chosen),
-        "Application " + chosen, f => report(chosen, f));
+      pkg.controller = await this._fetchBin(this._url(this.MAIN_DIR + "/" + chosen),
+        "Controller software " + chosen, f => report(chosen, f));
     }
 
-    if (needs.boot) {
-      if (!found.b1 || !found.b3) {
+    if (needs.system) {
+      if (!found.system) {
         throw new UploaderError(I18N.t("local.noBoot"), I18N.t("local.hintFiles"));
       }
-      pkg.b1 = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.b1),
-        "System firmware B1", f => report("B1.bin", f));
-      pkg.b3 = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.b3),
-        "System firmware B3", f => report("B3.bin", f));
+      pkg.system = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.system),
+        "System firmware " + found.system, f => report(found.system, f));
     }
 
     if (needs.esp !== "no") {

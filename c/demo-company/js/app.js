@@ -15,7 +15,6 @@ const App = {
     I18N.applyStatic();
     this.wireEvents();
     this.renderCaps();
-    this.renderPingPong();
     this.renderHistory();
     this.applySettingsToUi();
     this.initLog();
@@ -221,8 +220,8 @@ const App = {
     };
 
     // System firmware pair
-    row(!!(f.b1 && f.b3), I18N.t("local.sys"),
-      (f.b1 && f.b3) ? "B1.bin + B3.bin" : I18N.t("local.missing") + " (B1.bin / B3.bin)");
+    row(!!f.system, I18N.t("local.sys"),
+      f.system ? f.system : I18N.t("local.missing") + " (system*.bin)");
 
     // Controller software (radio choice when several M*.bin exist)
     if (!f.mains.length) {
@@ -391,9 +390,9 @@ const App = {
   async getPackage(mode) {
     // Only fetch what the chosen action actually flashes.
     const needs = {
-      controller: { main: true, boot: true, esp: "no" },
-      cloud: { main: false, boot: true, esp: "required" },
-      both: { main: true, boot: true, esp: "optional" },
+      controller: { controller: true, system: true, esp: "no" },
+      cloud: { controller: false, system: true, esp: "required" },
+      both: { controller: true, system: true, esp: "optional" },
     }[mode || "both"];
 
     if (this.localMode) {
@@ -402,7 +401,7 @@ const App = {
       const pkg = await LocalSource.load(this.localFound, needs, this.localMainSel,
         (name, frac) => this.step("download", "active", name + " — " + Math.round(frac * 100) + "%", null));
       this.step("download", "done", I18N.t("d.localLoaded"), 1);
-      return { pkg, version: needs.main && this.localMainSel ? this.localMainSel : "(folder)" };
+      return { pkg, version: needs.controller && this.localMainSel ? this.localMainSel : "(folder)" };
     }
     if (!this.manifest || !this.selectedVersion) {
       throw new UploaderError("No firmware version selected.", I18N.t("btn.refresh"));
@@ -439,8 +438,7 @@ const App = {
         },
         onDeviceLine: line => Util.dev("< " + line),
       });
-      this.renderPingPong();
-      this.showResult(true, I18N.t("res.ok.title"),
+        this.showResult(true, I18N.t("res.ok.title"),
         I18N.t(mode === "cloud" ? "res.cloudOk.text" : "res.ok.text"));
     } catch (e) {
       Util.err(e.message + (e.hint ? " — " + e.hint : ""));
@@ -450,8 +448,7 @@ const App = {
       this.$("gateBox").classList.add("hidden");
       this.setBusy(false);
       this.renderHistory();
-      this.renderPingPong();
-    }
+      }
   },
 
   markActiveStepFailed() {
@@ -483,7 +480,6 @@ const App = {
   },
 
   /* ------------------------------------------------------------- settings */
-  renderPingPong() { this.$("pingpongNext").textContent = PingPong.next(); },
 
   applySettingsToUi() {
     this.$("inManifestUrl").value = localStorage.getItem("gata.manifestUrl") || "";
@@ -527,11 +523,6 @@ const App = {
       this.$("localPane").classList.add("hidden");
       this.$("cloudPane").classList.remove("hidden");
       this.$("srcBadge").textContent = I18N.t("badge.cloud");
-    };
-
-    this.$("btnTogglePingpong").onclick = () => {
-      PingPong.commit(PingPong.next());       // consume one -> next flips
-      this.renderPingPong();
     };
 
     this.$("selLang").onchange = e => this.changeLanguage(e.target.value);

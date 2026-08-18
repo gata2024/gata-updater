@@ -9,15 +9,14 @@
 #   .\publish_firmware.ps1 -Version 15.5.0 -Main C:\build\M_15_5_0.bin -Notes "Pump curve fixes"
 #   .\publish_firmware.ps1 -Version 15.5.0 -Main M.bin -B1 B1.bin -B3 B3.bin -EspDir C:\esp\.pio\build\esp32dev
 #
-# If -B1/-B3 are omitted, the B1.bin/B3.bin already in firmware/ are reused.
+# If -System is omitted, the system firmware already in firmware/ is reused.
 # If -EspDir is omitted, the esp/ files already in firmware/ are reused
 # (pass -NoEsp for a release without ESP32 files).
 
 param(
     [Parameter(Mandatory = $true)]  [string]$Version,
     [Parameter(Mandatory = $true)]  [string]$Main,
-    [string]$B1,
-    [string]$B3,
+    [string]$System,
     [string]$EspDir,
     [switch]$NoEsp,
     [string]$Notes = "",
@@ -108,24 +107,25 @@ if ($manifest.versions | Where-Object { $_.version -eq $Version }) {
 }
 
 # ---------------------------------------------------------------- main app
-$mainName = Split-Path -Leaf $Main
+$mainName = "controller_" + ($Version -replace '[^0-9A-Za-z]', '_') + ".bin"
 $entryMain = New-FileEntry $Main $mainName
-Write-Host "  main       : $mainName ($($entryMain.size) B)"
+Write-Host "  controller : $mainName ($($entryMain.size) B)"
 
-# ---------------------------------------------------------------- B1 / B3
-if ($B1) { Test-Image $B1 "boot"; $entryB1 = New-FileEntry $B1 "B1.bin" }
-else {
-    $p = Join-Path $FirmwareDir "B1.bin"
-    if (-not (Test-Path $p)) { throw "No -B1 given and firmware\B1.bin does not exist." }
-    $entryB1 = New-FileEntry $p "B1.bin"
+# ------------------------------------------------------- system firmware
+# One image now: the controller is asked to enter update mode (backup
+# register 30), so there is no second build to alternate with.
+$systemName = "system_" + ($Version -replace '[^0-9A-Za-z]', '_') + ".bin"
+if ($System) {
+    Test-Image $System "boot"
+    $entrySystem = New-FileEntry $System $systemName
+} else {
+    $prev = Get-ChildItem (Join-Path $FirmwareDir "system_*.bin") -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $prev) { $prev = Get-Item (Join-Path $FirmwareDir "B1.bin") -ErrorAction SilentlyContinue }
+    if (-not $prev) { throw "No -System given and no system firmware found in $FirmwareDir" }
+    $entrySystem = New-FileEntry $prev.FullName $systemName
 }
-if ($B3) { Test-Image $B3 "boot"; $entryB3 = New-FileEntry $B3 "B3.bin" }
-else {
-    $p = Join-Path $FirmwareDir "B3.bin"
-    if (-not (Test-Path $p)) { throw "No -B3 given and firmware\B3.bin does not exist." }
-    $entryB3 = New-FileEntry $p "B3.bin"
-}
-Write-Host "  bootloaders: B1.bin / B3.bin"
+Write-Host "  system     : $systemName"
 
 # ---------------------------------------------------------------- ESP32
 $espEntry = $null
@@ -157,8 +157,8 @@ $newVersion = [ordered]@{
     date    = $Date
     latest  = $true
     notes   = $Notes
-    main    = $entryMain
-    bootloaders = [ordered]@{ b1 = $entryB1; b3 = $entryB3 }
+    controller = $entryMain
+    system     = $entrySystem
 }
 if ($espEntry) { $newVersion["esp"] = $espEntry }
 

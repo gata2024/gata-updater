@@ -70,19 +70,14 @@ const T = {
     /* ------------------------------------------------- ping-pong */
     const saved = localStorage.getItem("gata.lastBootloader");
     localStorage.removeItem("gata.lastBootloader");
-    const first = PingPong.next();
-    PingPong.commit(first);
-    const second = PingPong.next();
-    PingPong.commit(second);
-    const third = PingPong.next();
-    this.check("pingpong: B1 -> B3 -> B1", first === "B1" && second === "B3" && third === "B1",
-      first + "," + second + "," + third);
+    this.check("no ping-pong left: alternating system firmware is gone",
+      typeof PingPong === "undefined");
     if (saved === null) localStorage.removeItem("gata.lastBootloader");
     else localStorage.setItem("gata.lastBootloader", saved);
 
     /* ------------------------------------------------- manifest validation */
     const goodManifest = {
-      versions: [{ version: "1", main: { url: "m.bin" }, bootloaders: { b1: { url: "a" }, b3: { url: "b" } } }]
+      versions: [{ version: "1", controller: { url: "controller_1.bin" }, system: { url: "system_1.bin" } }]
     };
     let threw = false;
     try { Cloud.validateManifest(goodManifest); } catch (e) { threw = true; }
@@ -91,9 +86,15 @@ const T = {
     try { Cloud.validateManifest({ versions: [] }); } catch (e) { threw = true; }
     this.check("manifest: empty rejected", threw);
     threw = false;
-    try { Cloud.validateManifest({ versions: [{ version: "1", main: { url: "m" }, bootloaders: { b1: { url: "a" } } }] }); }
+    try { Cloud.validateManifest({ versions: [{ version: "1", controller: { url: "c.bin" } }] }); }
     catch (e) { threw = true; }
-    this.check("manifest: missing b3 rejected", threw);
+    this.check("manifest: missing system firmware rejected", threw);
+    threw = false;
+    try {
+      Cloud.validateManifest({ versions: [{ version: "1", main: { url: "M_1.bin" },
+                                            bootloaders: { b1: { url: "B1.bin" }, b3: { url: "B3.bin" } } }] });
+    } catch (e) { threw = true; }
+    this.check("manifest: releases published under the old names still load", !threw);
 
     /* ------------------------------------------------- manifest signing */
     {
@@ -199,25 +200,31 @@ const T = {
 
     /* ------------------------------------------------- local folder scan */
     const lm = LocalSource.matchNames(
-      ["B1.bin", "b3.BIN", "M_15_4_26.bin", "M_16_0_0.bin", "notes.bin"],
+      ["system_18_8_27.bin", "controller_18_8_27.bin", "M_16_0_0.bin", "notes.bin"],
       ["bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin"]);
-    this.check("local: finds B1/B3 case-insensitively", lm.b1 === "B1.bin" && lm.b3 === "b3.BIN");
-    this.check("local: collects all M*.bin, ignores others",
-      lm.mains.length === 2 && lm.mains.includes("M_15_4_26.bin") && !lm.mains.includes("notes.bin"));
+    this.check("local: finds the system firmware", lm.system === "system_18_8_27.bin");
+    this.check("local: controller files listed, system not among them",
+      lm.mains.length === 2 && !lm.mains.some(n => /^system/i.test(n)));
+    const lmOld = LocalSource.matchNames(["B1.bin", "b3.BIN", "M_15_4_26.bin"], []);
+    this.check("local: old B1/M names still recognised",
+      lmOld.system === "B1.bin" && lmOld.mains.length === 1);
+    this.check("local: collects controller files, ignores everything else",
+      lm.mains.includes("controller_18_8_27.bin") && lm.mains.includes("M_16_0_0.bin") &&
+      !lm.mains.includes("notes.bin"));
     this.check("local: complete ESP32 set matched",
       lm.esp.bootloader === "bootloader.bin" && lm.esp.firmware === "firmware.bin" &&
       lm.esp.partitions === "partitions.bin" && lm.esp.boot_app0 === "boot_app0.bin");
     const lm2 = LocalSource.matchNames(["M1.bin"], []);
     this.check("local: missing files reported as null",
-      lm2.b1 === null && lm2.esp.firmware === null && lm2.mains.length === 1);
+      lm2.system === null && lm2.esp.firmware === null && lm2.mains.length === 1);
 
     /* Live scan against the local server's listing endpoint (when present). */
     try {
       LocalSource.BASE = "../";                 // tests page lives in tests/
       const found = await LocalSource.scan();
-      this.check("local: live scan finds B1+B3+M in main_firmware",
-        !!found.b1 && !!found.b3 && found.mains.length >= 1,
-        JSON.stringify({ b1: found.b1, b3: found.b3, mains: found.mains.map(m => m.name) }));
+      this.check("local: live scan finds system + controller in main_firmware",
+        !!found.system && found.mains.length >= 1,
+        JSON.stringify({ system: found.system, mains: found.mains.map(m => m.name) }));
       this.check("local: live scan finds complete cloud_firmware set", found.espComplete === true);
     } catch (e) {
       this.check("local: live scan", false, e.message);

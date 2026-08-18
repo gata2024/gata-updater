@@ -312,21 +312,18 @@ const Flows = {
     let lastErr = null;
     for (let cycle = 0; cycle < maxCycles; cycle++) {
       this._ck();
-      const which = PingPong.next();
-      const image = which === "B1" ? ctx.pkg.b1 : ctx.pkg.b3;
+      const image = ctx.pkg.system;
       step("system", "active",
-        I18N.t("d.sysFlashing", { b: which, s: Util.fmtBytes(image.length) }), 0);
+        I18N.t("d.sysFlashing", { s: Util.fmtBytes(image.length) }), 0);
       const dfu = await this._openDfu(ctx);
       this._ck();
       await dfu.flash(APP_CONFIG.systemFlashAddr, image, p => {
         const frac = p.phase === "erase" ? p.value * 0.25 : 0.25 + p.value * 0.75;
         step("system", "active",
-          p.phase === "erase" ? I18N.t("d.sysErasing") : I18N.t("d.sysWriting", { b: which }),
-          frac);
+          p.phase === "erase" ? I18N.t("d.sysErasing") : I18N.t("d.sysWriting"), frac);
       });
-      PingPong.commit(which);
-      step("system", "done", I18N.t("d.sysDone", { b: which }), 1);
-      Util.ok("System firmware " + which + " flashed - controller rebooting into update mode.");
+      step("system", "done", I18N.t("d.sysDone"), 1);
+      Util.ok("System firmware installed - controller rebooting into update mode.");
       await Util.sleep(ctx.demo ? 300 : 2000);
 
       step("connect", "active", I18N.t("d.waitPort"), null);
@@ -560,8 +557,8 @@ const Flows = {
       for (let attempt = 0; attempt < writeAttempts.length; attempt++) {
         try {
           step("app", "active",
-            I18N.t("d.appInstalling", { s: Util.fmtBytes(ctx.pkg.main.length) }), 0.15);
-          await bl.writeApp(ctx.pkg.main, f =>
+            I18N.t("d.appInstalling", { s: Util.fmtBytes(ctx.pkg.controller.length) }), 0.15);
+          await bl.writeApp(ctx.pkg.controller, f =>
             step("app", "active", I18N.t("d.appProg", { p: Math.round(f * 100) }), 0.15 + f * 0.8),
             writeAttempts[attempt]);
           break;                                   // written
@@ -628,19 +625,17 @@ const Flows = {
     const t0 = Date.now();
     let ok = false;
     try {
-      const which = ctx.forceBootloader || PingPong.next();
-      const image = which === "B1" ? ctx.pkg.b1 : ctx.pkg.b3;
-      if (!image) throw new UploaderError("System firmware file " + which + ".bin is not loaded.",
+      const image = ctx.pkg.system;
+      if (!image) throw new UploaderError("The system firmware file is not loaded.",
         I18N.t("hint.pickBoth"));
       if (!Validate.isValidSystem(image)) {
-        throw new UploaderError(I18N.t("val.boot", { f: which + ".bin" }));
+        throw new UploaderError(I18N.t("val.boot", { f: "system firmware" }));
       }
       await this._acquireWakeLock();
       const dfu = await this._openDfu(ctx);
       await dfu.flash(APP_CONFIG.systemFlashAddr, image, p =>
         ctx.onProgress && ctx.onProgress(p.phase, p.value));
-      PingPong.commit(which);
-      Util.ok("System firmware " + which + " installed - device reboots into update mode.");
+      Util.ok("System firmware installed - device reboots into update mode.");
       ok = true;
     } finally {
       this.running = false;
@@ -655,13 +650,13 @@ const Flows = {
     const t0 = Date.now();
     let ok = false;
     try {
-      if (!Validate.isValidApp(ctx.pkg.main)) {
+      if (!Validate.isValidApp(ctx.pkg.controller)) {
         throw new UploaderError(I18N.t("val.main", { f: "M*.bin" }));
       }
       await this._acquireWakeLock();
       const bl = await this._connectBootloader(ctx, { tries: 3 });
       await bl.format(sec => ctx.onProgress && ctx.onProgress("erase", sec));
-      await bl.writeApp(ctx.pkg.main, f => ctx.onProgress && ctx.onProgress("write", f));
+      await bl.writeApp(ctx.pkg.controller, f => ctx.onProgress && ctx.onProgress("write", f));
       await bl.verify();
       if (ctx.autoJump !== false) await bl.jump();
       try { await bl.t.close(); } catch (e) { /* ignore */ }

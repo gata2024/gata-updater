@@ -47,22 +47,21 @@ const Validate = {
   },
 
   /* Validate a whole package; throws UploaderError with a translated message.
-   * pkg = { main, b1, b3, esp:{bootloader,partitions,boot_app0,firmware}|null }
-   * needs = { main: bool, system: bool, esp: bool } - which parts this run uses. */
+   * pkg = { controller, system, esp:{bootloader,partitions,boot_app0,firmware}|null }
+   * needs = { controller: bool, system: bool, esp: bool } - what this run uses. */
   checkPackage(pkg, needs) {
-    const n = Object.assign({ main: true, system: true, esp: false }, needs || {});
+    const n = Object.assign({ controller: true, system: true, esp: false }, needs || {});
     const bad = (key, fname) => {
       throw new UploaderError(I18N.t(key, { f: fname }), I18N.t("hint.retry"));
     };
     const parts = [];
-    if (n.main) {
-      if (!this.isValidApp(pkg.main)) bad("val.main", "M*.bin");
-      parts.push("app");
+    if (n.controller) {
+      if (!this.isValidApp(pkg.controller)) bad("val.main", "controller software");
+      parts.push("controller software");
     }
     if (n.system) {
-      if (!this.isValidSystem(pkg.b1)) bad("val.boot", "B1.bin");
-      if (!this.isValidSystem(pkg.b3)) bad("val.boot", "B3.bin");
-      parts.push("B1+B3");
+      if (!this.isValidSystem(pkg.system)) bad("val.boot", "system firmware");
+      parts.push("system firmware");
     }
     if (n.esp && (!pkg.esp || !pkg.esp.firmware)) {
       throw new UploaderError(I18N.t("err.noEspFiles"));
