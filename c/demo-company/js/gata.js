@@ -95,7 +95,7 @@ class GataBootloader {
     // Strict match: the running APPLICATION streams HMI frames on this same
     // port, and a loose "MCU" substring could false-match inside them.
     const r = await this.waitFor(["MCU:STM32"], 3000, ["UNKNOWN_COMMAND"]);
-    Util.ok("Bootloader answered: GATA controller detected.");
+    Util.ok("GATA controller answered - ready for the update.");
     return r.text;
   }
 
@@ -172,7 +172,15 @@ class GataBootloader {
   async jump() {
     await Util.sleep(500);
     this.clear();
-    await this.send("JUMP");
+    /* The controller resets the instant it reads JUMP, so the USB device can
+     * disappear while this very transfer is in flight. On WebUSB (phones) that
+     * surfaces as a transfer error - which is SUCCESS here, not a failure, and
+     * must never abort an update that has already been verified. */
+    try {
+      await this.send("JUMP");
+    } catch (e) {
+      Util.info("Controller disconnected as it restarted (expected).");
+    }
     await Util.sleep(800);   // give the reset a moment; the watcher confirms the app
     Util.ok("Restart command sent - the controller is rebooting.");
   }

@@ -352,6 +352,26 @@ const App = {
     });
   },
 
+  /* One tap: if this browser has never been given the controller, open the
+   * chooser straight away (we are inside the click). Returns the transport, or
+   * null - a refusal is not fatal, the flow still has its own gates. */
+  async preConnect() {
+    if (this.demo()) return null;
+    try {
+      const known = await Transport.reconnect();
+      if (known) { Util.info("Controller already approved on this device - connecting."); return known; }
+      Util.info("Asking for permission to use the controller…");
+      return await Transport.request();
+    } catch (e) {
+      if (e && (e.name === "NotFoundError" || /No (device|port) selected/i.test(e.message))) {
+        await this.explainEmptyPicker();
+      } else {
+        Util.warn("Could not open the controller yet (" + e.message + ") - continuing.");
+      }
+      return null;
+    }
+  },
+
   /* Report what the browser can actually SEE on USB. "The list was empty" and
    * "I closed the list" produce the same error, and the causes are different:
    * on a phone it is nearly always the OTG cable, an unpowered controller, or
@@ -461,9 +481,17 @@ const App = {
     this.setBusy(true);
     this.resetSteps(mode);
     try {
+      /* Ask for the controller NOW, while this click still counts as a user
+       * gesture - browsers only open the device chooser during one. Doing it
+       * here means one tap: the chooser appears immediately instead of a
+       * second "connect" button appearing minutes later, after the download,
+       * when the gesture is long gone. Already-approved controllers skip it
+       * entirely and nothing is ever shown. */
+      const preConnected = await this.preConnect();
+
       const { pkg, version } = await this.getPackage(mode);
       await Flows.runFullUpdate({
-        mode, pkg, version,
+        mode, pkg, version, preConnected,
         demo: this.demo(),
         demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,

@@ -1,7 +1,7 @@
 /* GATA Cloud Uploader - serial transports to the CDC bootloader.
  *
  * The flashed bootloader (B1/B3) enumerates as a USB CDC serial port:
- *   VID 0x0483  PID 0x5740  "STM32 Bootloader"
+ *   VID 0x0483  PID 0x5740  "GATA Controller" (older boards: "STM32 …")
  *
  * Two interchangeable transports expose { open, close, write, onData }:
  *   - SerialTransport : Web Serial API (Chrome/Edge on Windows / macOS / Linux)
@@ -64,7 +64,7 @@ class SerialTransport {
           if (value && this._onData) this._onData(value);
         }
       } catch (e) {
-        if (!this._closing) Util.warn("Serial read stopped: " + e.message);
+        if (!this._closing) Util.warn("Controller stopped sending (" + e.message + ").");
         break;
       } finally {
         try { this._reader.releaseLock(); } catch (e) { /* ignore */ }
@@ -132,7 +132,7 @@ class UsbCdcTransport {
       }
     }
     if (!this._dataIface || this._epIn == null || this._epOut == null) {
-      throw new UploaderError("This USB device does not look like the GATA bootloader (no CDC data interface).");
+      throw new UploaderError("That USB device is not a GATA controller (no serial interface).");
     }
 
     try {
@@ -171,7 +171,7 @@ class UsbCdcTransport {
       try {
         res = await this.device.transferIn(this._epIn, 512);
       } catch (e) {
-        if (!this._closing) Util.warn("USB read stopped: " + e.message);
+        if (!this._closing) Util.warn("Controller stopped sending (" + e.message + ").");
         return;
       }
       if (res.status === "stall") {
@@ -234,17 +234,17 @@ const Transport = {
   watchDisconnects() {
     try {
       if (navigator.serial && navigator.serial.addEventListener) {
-        navigator.serial.addEventListener("disconnect", () => Util.warn("Serial device unplugged."));
-        navigator.serial.addEventListener("connect", () => Util.info("Serial device plugged in."));
+        navigator.serial.addEventListener("disconnect", () => Util.warn("GATA controller disconnected."));
+        navigator.serial.addEventListener("connect", () => Util.info("GATA controller connected."));
       }
       if (navigator.usb && navigator.usb.addEventListener) {
         navigator.usb.addEventListener("disconnect", e => {
           const d = e.device || {};
-          Util.warn("USB device unplugged (" + (d.productName || "unknown") + ").");
+          Util.warn("GATA controller disconnected (" + (d.productName || "USB device") + ").");
         });
         navigator.usb.addEventListener("connect", e => {
           const d = e.device || {};
-          Util.info("USB device plugged in (" + (d.productName || "unknown") + ").");
+          Util.info("GATA controller connected (" + (d.productName || "USB device") + ").");
         });
       }
     } catch (e) { /* purely informational */ }

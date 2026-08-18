@@ -364,7 +364,10 @@ const Flows = {
     if (ctx.demo) return this._dfuCycle(ctx, step);
 
     step("connect", "active", I18N.t("d.waitPort"), null);
-    let transport = await Transport.reconnect();
+    /* The controller the user approved when they pressed UPDATE (one tap, no
+     * second button). Falls back to any already-approved device. */
+    let transport = ctx.preConnected || await Transport.reconnect();
+    ctx.preConnected = null;
     let bootModeChosen = false;
 
     if (!transport) {
