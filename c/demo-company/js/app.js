@@ -321,9 +321,24 @@ const App = {
         box.classList.add("hidden");
         if (ok) resolve(value); else reject(value);
       };
+      /* Never leave the buttons dead. Disabling them while a device chooser is
+       * open used to make later taps do NOTHING AT ALL if that chooser never
+       * settled - which looks exactly like "the popup does not appear". */
+      let asking = false;
       const run = fn => async () => {
-        btn.disabled = true; btnAlt.disabled = true;
+        /* NEVER disable these buttons. A disabled button does not fire its
+         * handler at all, so if a device chooser failed to appear the next
+         * tap did nothing AND said nothing - looking exactly like a broken
+         * app. Guard with a flag instead, so every tap gets an answer. */
+        if (asking) {
+          Util.warn("Still waiting for the device list to open. If nothing appeared: " +
+                    "unplug and re-plug the USB cable, then press again.");
+          return;
+        }
+        asking = true;
+        const reArm = setTimeout(() => { asking = false; }, 12000);
         try {
+          Util.info("Opening the device list…");
           finish(true, await fn());
           return;
         } catch (e) {
@@ -332,11 +347,17 @@ const App = {
             // to a cancelled one, so say which of the two it was.
             Util.warn("No device picked — waiting…");
             await this.explainEmptyPicker();
+          } else if (e && e.name === "SecurityError") {
+            Util.err("The browser refused to open the device list (" + e.message +
+                     "). Press the button again - it must be a direct tap.");
+          } else if (e && e.name === "NotAllowedError") {
+            Util.err("The browser blocked USB access (" + e.message + ").");
           } else {
             finish(false, e);
           }
         } finally {
-          btn.disabled = false; btnAlt.disabled = false;
+          clearTimeout(reArm);
+          asking = false;
         }
       };
       btn.onclick = run(action);

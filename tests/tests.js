@@ -139,6 +139,19 @@ const T = {
       this.check("pwa: webmanifest lists PNG icons and all exist", pwaOk, pwaNote);
     }
 
+    /* ------------------------------------- gate buttons stay answerable */
+    {
+      /* A disabled button does not fire its handler, so a device chooser that
+       * never opened left every further tap doing NOTHING and saying nothing.
+       * The connect buttons must never be disabled while asking. */
+      const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("showResult(ok"));
+      this.check("gate: connect buttons are never disabled while asking",
+        !/btn\.disabled\s*=\s*true/.test(gate) && !/btnAlt\.disabled\s*=\s*true/.test(gate));
+      this.check("gate: a repeated tap is answered instead of ignored",
+        /Still waiting for the device list/.test(gate));
+    }
+
     /* --------------------------------------------- gate wiring (app.js) */
     {
       // The flow passes 5 arguments to ui.userGate: title, text, action, the
