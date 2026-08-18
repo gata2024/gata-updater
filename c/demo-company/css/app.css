@@ -291,3 +291,11 @@ details.picky > summary {
   padding: 6px 2px; list-style: revert;
 }
 details.picky[open] > summary { margin-bottom: 8px; }
+
+/* BOOT-mode help inside the connect gate: the two board buttons, R and B. */
+.bootguide { margin-top: 12px; text-align: left; }
+.bootguide .bootimg {
+  display: block; width: 100%; max-width: 320px; margin: 10px auto 6px;
+  border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.35);
+}
+.bootguide ol.prep { margin: 6px 0 4px; }

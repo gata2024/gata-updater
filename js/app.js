@@ -308,12 +308,11 @@ const App = {
       const box = this.$("gateBox");
       const btn = this.$("gateBtn");
       const btnAlt = this.$("gateBtnAlt");
-      /* One short line, no buttons, no instructions to read. The detail that
-       * used to fill this box is still written to the technical log for
-       * support. */
-      this.$("gateText").textContent = I18N.t("gate.tap");
-      btn.classList.add("hidden");
-      btnAlt.classList.add("hidden");
+      this.$("gateText").textContent = text;
+      btn.textContent = title;
+      btn.classList.remove("hidden");
+      btnAlt.classList.toggle("hidden", !alt);
+      if (alt) btnAlt.textContent = alt.label;
       box.classList.remove("hidden");
       box.scrollIntoView({ behavior: "smooth", block: "center" });
       Util.warn("WAITING FOR YOU: " + title);
@@ -367,26 +366,11 @@ const App = {
        * real touch, so ANY touch on the page opens it. Successive touches
        * alternate between the two ways a controller can appear (running, or
        * held in BOOT mode), so nothing has to be chosen or explained. */
-      /* MUST be "click": a browser grants permission to open a device chooser
-       * only on a COMPLETED tap. pointerdown/touchstart fire too early and the
-       * request is refused with "Must be handling a user gesture". */
-      const actions = alt ? [action, alt.action] : [action];
-      let next = 0;
-      const onTouch = ev => {
-        // let real controls (Cancel, language, settings) work normally
-        if (ev.target.closest && ev.target.closest("button, a, select, summary, input")) return;
-        const fn = actions[next % actions.length];
-        if (actions.length > 1) {
-          Util.info(next % actions.length === 0
-            ? "Looking for a running controller…" : "Looking for a controller in BOOT mode…");
-        }
-        next++;
-        run(fn)();
-      };
-      document.addEventListener("click", onTouch, true);
-      const stopTouch = () => document.removeEventListener("click", onTouch, true);
-      const origFinish = finish;
-      finish = (ok, value) => { stopTouch(); origFinish(ok, value); };
+      /* MUST be a real "click" handler: a browser opens a device chooser only
+       * during a COMPLETED tap - pointerdown fires too early and the request
+       * is refused with "Must be handling a user gesture". */
+      btn.onclick = run(action);
+      btnAlt.onclick = alt ? run(alt.action) : null;
 
       if (poll) {
         pollTimer = setInterval(async () => {

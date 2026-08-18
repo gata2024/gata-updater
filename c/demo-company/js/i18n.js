@@ -147,7 +147,12 @@ const I18N = {
       "gate.connect.tipPc": "Tip: start the updater with CLICK_ME_START_ON_PC.bat and approve its one-time admin popup — after that the connection is fully automatic and this question never appears.",
       "d.stallRetry": "The controller stopped accepting data — retrying more gently after a power cycle.",
       "gate.replug.text": "The controller restarted into update mode and is waiting for the connection.",
-      "gate.tap": "Touch the screen to connect the controller",
+      "boot.title": "Not in the list? Put the controller in update mode",
+      "boot.alt": "The two small buttons on the controller board: R is RESET, B is BOOT",
+      "boot.1": "Press and <b>hold B</b> (BOOT).",
+      "boot.2": "While still holding B, press and release <b>R</b> (RESET).",
+      "boot.3": "Now release <b>B</b>, then press the button above.",
+      "boot.note": "The controller's screen stays off in update mode — that is normal. Only controllers with very old software need this.",
       "gate.power.btn": "I switched the controller off and on",
       "gate.power.text": "Switch the controller OFF and ON (no BOOT switch needed). The update then restarts by itself, writing more slowly. If it is already back, this continues on its own.",
       "gate.connect.tipMobile": "You only have to pick the device once — this phone remembers it for the next update.",
@@ -328,7 +333,12 @@ const I18N = {
       "gate.connect.tipPc": "نصيحة: شغّل المحدّث عبر CLICK_ME_START_ON_PC.bat ووافق على نافذة المسؤول التي تظهر مرة واحدة — بعدها يصبح الاتصال تلقائيًا بالكامل ولن يظهر هذا السؤال مجددًا.",
       "d.stallRetry": "توقفت اللوحة عن استقبال البيانات — سنعيد المحاولة بسرعة أبطأ بعد إعادة التشغيل.",
       "gate.replug.text": "أعادت اللوحة التشغيل ودخلت وضع التحديث وهي تنتظر الاتصال.",
-      "gate.tap": "المس الشاشة للاتصال بوحدة التحكم",
+      "boot.title": "لا تظهر في القائمة؟ ضع وحدة التحكم في وضع التحديث",
+      "boot.alt": "الزران الصغيران على لوحة التحكم: R للتصفير (RESET) و B للتحديث (BOOT)",
+      "boot.1": "اضغط مع الاستمرار على <b>B</b> (BOOT).",
+      "boot.2": "مع استمرار الضغط على B، اضغط ثم حرّر <b>R</b> (RESET).",
+      "boot.3": "الآن حرّر <b>B</b>، ثم اضغط الزر بالأعلى.",
+      "boot.note": "تبقى شاشة وحدة التحكم مطفأة في وضع التحديث، وهذا طبيعي. لا تحتاج إلى ذلك إلا اللوحات ذات البرامج القديمة جدًا.",
       "gate.power.btn": "أطفأتُ اللوحة ثم شغّلتها",
       "gate.power.text": "أطفئ اللوحة ثم شغّلها (لا حاجة لمفتاح BOOT). سيبدأ التحديث تلقائيًا من جديد بكتابة أبطأ. وإذا عادت اللوحة بالفعل فسيكمل العمل تلقائيًا.",
       "gate.connect.tipMobile": "ستختار الجهاز مرة واحدة فقط — سيتذكره الهاتف في التحديث القادم.",
@@ -509,7 +519,12 @@ const I18N = {
       "gate.connect.tipPc": "İpucu: güncelleyiciyi CLICK_ME_START_ON_PC.bat ile başlatın ve bir kez görünen yönetici penceresini onaylayın — sonrasında bağlantı tamamen otomatik olur ve bu soru bir daha görünmez.",
       "d.stallRetry": "Kontrol ünitesi veri almayı durdurdu — kapatıp açtıktan sonra daha yavaş yeniden denenecek.",
       "gate.replug.text": "Kontrol ünitesi yeniden başlayıp güncelleme moduna geçti ve bağlantıyı bekliyor.",
-      "gate.tap": "Kontrol ünitesine bağlanmak için ekrana dokunun",
+      "boot.title": "Listede yok mu? Kontrol ünitesini güncelleme moduna alın",
+      "boot.alt": "Kart üzerindeki iki küçük düğme: R = RESET, B = BOOT",
+      "boot.1": "<b>B</b> (BOOT) düğmesini basılı tutun.",
+      "boot.2": "B basılıyken <b>R</b> (RESET) düğmesine basıp bırakın.",
+      "boot.3": "Şimdi <b>B</b> düğmesini bırakın ve yukarıdaki düğmeye basın.",
+      "boot.note": "Güncelleme modunda kontrol ünitesinin ekranı kapalı kalır; bu normaldir. Buna yalnızca çok eski yazılımlı kartlar ihtiyaç duyar.",
       "gate.power.btn": "Kontrol ünitesini kapatıp açtım",
       "gate.power.text": "Kontrol ünitesini KAPATIP AÇIN (BOOT anahtarı gerekmez). Güncelleme daha yavaş yazarak kendiliğinden yeniden başlar. Kart zaten geri geldiyse işlem kendiliğinden devam eder.",
       "gate.connect.tipMobile": "Cihazı yalnızca bir kez seçmeniz yeterli — telefon bir sonraki güncellemede hatırlar.",
@@ -596,6 +611,9 @@ const I18N = {
       const v = this.t(el.getAttribute("data-i18n-title"));
       el.title = v;
       el.setAttribute("aria-label", v);
+    });
+    document.querySelectorAll("[data-i18n-alt]").forEach(el => {
+      el.alt = this.t(el.getAttribute("data-i18n-alt"));
     });
   },
 

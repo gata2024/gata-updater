@@ -145,8 +145,8 @@ const T = {
        * handling a user gesture"); only a COMPLETED tap counts. */
       const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
-      this.check("gate: connects on a completed tap (click), not pointerdown",
-        /addEventListener\("click", onTouch, true\)/.test(gate) &&
+      this.check("gate: connects from a button click, never from pointerdown",
+        /btn\.onclick\s*=\s*run\(action\)/.test(gate) &&
         !/addEventListener\("pointerdown"/.test(gate));
     }
 

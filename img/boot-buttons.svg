@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" role="img"
+     aria-label="The two buttons on the controller board: R is RESET, B is BOOT">
+  <!-- board -->
+  <rect x="0" y="0" width="320" height="210" rx="10" fill="#1d6b3f"/>
+  <rect x="6" y="6" width="308" height="198" rx="7" fill="#20794a"/>
+  <!-- a few silkscreen details so it reads as the real PCB corner -->
+  <rect x="24" y="18" width="34" height="12" rx="2" fill="#0f4a2c"/>
+  <text x="24" y="14" font-family="system-ui,sans-serif" font-size="11" fill="#cfe8d8">R20</text>
+  <rect x="250" y="26" width="46" height="34" rx="3" fill="#12331f"/>
+  <text x="250" y="20" font-family="system-ui,sans-serif" font-size="11" fill="#cfe8d8">R63</text>
+  <rect x="248" y="96" width="56" height="80" rx="4" fill="#111"/>
+  <text x="252" y="92" font-family="system-ui,sans-serif" font-size="11" fill="#cfe8d8">U4</text>
+
+  <!-- SW3 = RESET, marked R on the silkscreen -->
+  <text x="18" y="72" font-family="system-ui,sans-serif" font-size="13" fill="#eaf6ee">SW3</text>
+  <rect x="64" y="38" width="66" height="60" rx="6" fill="#f2f2f2" stroke="#c9c9c9" stroke-width="2"/>
+  <rect x="74" y="46" width="46" height="44" rx="4" fill="#fff" stroke="#d6d6d6"/>
+  <circle cx="97" cy="68" r="15" fill="#efefef" stroke="#bdbdbd" stroke-width="2"/>
+  <text x="146" y="76" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#ffffff">R</text>
+  <text x="168" y="76" font-family="system-ui,sans-serif" font-size="15" fill="#bfe3cd">RESET</text>
+
+  <!-- SW2 = BOOT, marked B on the silkscreen -->
+  <text x="18" y="152" font-family="system-ui,sans-serif" font-size="13" fill="#eaf6ee">SW2</text>
+  <rect x="64" y="118" width="66" height="60" rx="6" fill="#f2f2f2" stroke="#c9c9c9" stroke-width="2"/>
+  <rect x="74" y="126" width="46" height="44" rx="4" fill="#fff" stroke="#d6d6d6"/>
+  <circle cx="97" cy="148" r="15" fill="#efefef" stroke="#bdbdbd" stroke-width="2"/>
+  <text x="146" y="156" font-family="system-ui,sans-serif" font-size="30" font-weight="700" fill="#ffffff">B</text>
+  <text x="168" y="156" font-family="system-ui,sans-serif" font-size="15" fill="#bfe3cd">BOOT</text>
+</svg>
