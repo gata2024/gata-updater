@@ -254,8 +254,17 @@ const Flows = {
 
     await Util.sleep(2500);                        // board reboots into the window
     let appSeenAgain = 0;
-    for (let i = 0; i < 10; i++) {
+    /* Phones need longer: some end the USB-OTG session when the attached
+     * device restarts and only rescan when the cable is touched, so wait
+     * generously and say what to do rather than failing over to BOOT mode. */
+    const tries = Transport.isAndroid() ? 22 : 10;
+    for (let i = 0; i < tries; i++) {
       this._ck();
+      if (i === 6 && Transport.isAndroid()) {
+        Util.warn("The controller restarted but has not reappeared yet — unplug and re-plug the USB cable. " +
+                  "It stays in update mode and waits, so there is no rush.");
+        step("connect", "active", I18N.t("d.replug"), null);
+      }
       const t2 = await Transport.reconnect();
       if (t2) {
         let opened = false;
@@ -300,6 +309,32 @@ const Flows = {
         }
       }
       await Util.sleep(1200);
+    }
+
+    /* The controller ACKNOWLEDGED the command, so it IS in update mode - it
+     * just is not visible to this browser yet (a phone that dropped the USB
+     * session, or a permission that does not survive the re-enumeration).
+     * Asking for it by name is right; falling back to BOOT mode is not. */
+    if (acked) {
+      try {
+        const t3 = await ctx.ui.userGate(I18N.t("gate.run.btn"), I18N.t("gate.replug.text"),
+          async () => await Transport.request(), null,
+          async () => (await Transport.reconnect()) || null);
+        if (t3) {
+          await t3.open();
+          const bl3 = new GataBootloader(t3);
+          bl3.shouldAbort = () => this.cancelRequested;
+          if (ctx.onDeviceLine) bl3.onDeviceLine = ctx.onDeviceLine;
+          await Util.sleep(700);
+          await bl3.handshake();
+          step("system", "done", I18N.t("d.sysCmd"), 1);
+          step("connect", "done", I18N.t("d.connected"), 1);
+          return bl3;
+        }
+      } catch (e) {
+        if (e.message === I18N.t("err.cancelled")) throw e;
+        Util.warn("Still could not reach the controller (" + e.message + ").");
+      }
     }
     return null;
   },
