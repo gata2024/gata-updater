@@ -34,6 +34,12 @@ $distDir    = Join-Path $app "dist"
 $manifestUrl = "$FirmwareBase/customers/$Id/manifest.json"
 $appUrl      = "$SiteBase/c/$Id/"
 
+function Repoint([string]$url) {
+    # customers\<id>\manifest.json is one level deeper than the shared binaries
+    if ($url -like "../../*") { return $url }
+    return "../../" + $url
+}
+
 Write-Host "== GATA customer package: $Name ($Id) ==" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------- 1. channel
@@ -47,11 +53,31 @@ if (-not (Test-Path $chanManifest)) {
                    else { Join-Path $firmware "customers\$FromChannel\manifest.json" }
         if (-not (Test-Path $srcPath)) { throw "Source channel not found: $srcPath" }
         $src = Get-Content $srcPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        # Copy the version list, re-pointing every URL at the shared root.
-        $json = $src.versions | ConvertTo-Json -Depth 10
-        $json = $json -replace '"url":\s*"(?!\.\./)', '"url":  "../../'
-        $versions = @($json | ConvertFrom-Json)
-        Write-Host "  seeded from channel '$FromChannel' ($($versions.Count) version(s))"
+
+        # Seed with the version that channel currently offers. Copy it field by
+        # field and re-point every URL at the shared firmware root - editing the
+        # JSON as text loses entries as soon as a channel holds more than one.
+        $seed = $src.versions | Where-Object { $_.latest } | Select-Object -First 1
+        if (-not $seed) { $seed = $src.versions | Select-Object -First 1 }
+        if ($seed) {
+            $v = $seed | ConvertTo-Json -Depth 10 | ConvertFrom-Json     # deep copy
+            foreach ($k in @("controller", "system", "main")) {
+                if ($v.$k -and $v.$k.url) { $v.$k.url = Repoint $v.$k.url }
+            }
+            if ($v.bootloaders) {
+                foreach ($b in @("b1", "b3")) {
+                    if ($v.bootloaders.$b -and $v.bootloaders.$b.url) { $v.bootloaders.$b.url = Repoint $v.bootloaders.$b.url }
+                }
+            }
+            if ($v.esp) {
+                foreach ($p in @("bootloader", "partitions", "boot_app0", "firmware")) {
+                    if ($v.esp.$p -and $v.esp.$p.url) { $v.esp.$p.url = Repoint $v.esp.$p.url }
+                }
+            }
+            $v.latest = $true
+            $versions = @($v)
+            Write-Host "  seeded from channel '$FromChannel' with version $($v.version)"
+        }
     } else {
         Write-Host "  created empty (publish a version with publish_firmware.ps1 -Customer $Id)"
     }

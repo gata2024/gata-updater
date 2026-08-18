@@ -14,7 +14,9 @@
 # (pass -NoEsp for a release without ESP32 files).
 
 param(
-    [Parameter(Mandatory = $true)]  [string]$Version,
+    # Leave -Version out and it is built from today's date and the customer:
+    # dd_MM_yy_<Customer>, e.g. 18_08_26_KSP / 18_08_26_Danway / 18_08_26_General.
+    [string]$Version,
     [Parameter(Mandatory = $true)]  [string]$Main,
     [string]$System,
     [string]$EspDir,
@@ -79,6 +81,23 @@ function New-FileEntry([string]$srcPath, [string]$relUrl) {
     }
     $f = Get-Item $dest
     return [ordered]@{ url = ($script:UrlPrefix + $relUrl); size = [int]$f.Length; sha256 = (Get-Sha256 $dest) }
+}
+
+# ------------------------------------------------- version name (dd_MM_yy_X)
+if (-not $Version) {
+    $label = if ($Customer -and $Customer -ne "default") { $Customer } else { "General" }
+    # Use the channel's company name when it has one, so "ksp" becomes "KSP".
+    $chanFile = if ($Customer -and $Customer -ne "default") {
+        Join-Path $FirmwareDir "customers\$Customer\manifest.json"
+    } else { Join-Path $FirmwareDir "manifest.json" }
+    if (Test-Path $chanFile) {
+        try {
+            $c = (Get-Content $chanFile -Raw -Encoding UTF8 | ConvertFrom-Json).customer
+            if ($c) { $label = $c }
+        } catch { }
+    }
+    $label = ($label -replace '[^0-9A-Za-z]', '')
+    $Version = (Get-Date -Format "dd_MM_yy") + "_" + $label
 }
 
 # ---------------------------------------------------------------- validate
