@@ -180,21 +180,21 @@ const T = {
       const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
       this.check("gate: connects from a button click, never from pointerdown",
-        /btn\.onclick\s*=/.test(gate) && /run\(fn\)\(\)/.test(gate) &&
+        /btn\.onclick\s*=\s*run\(action\)/.test(gate) &&
+        /btnAlt\.onclick\s*=\s*alt \? run\(alt\.action\)/.test(gate) &&
         !/addEventListener\("pointerdown"/.test(gate));
     }
 
-    /* ------------------------------ the connect gate is ONE plain button */
+    /* --------------------------------- the connect gate: labels + text */
     {
       const src = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       const gate = src.slice(src.indexOf("userGate(title"), src.indexOf("preConnect()"));
-      this.check("gate: exactly one button, always the same label",
-        /btn\.textContent\s*=\s*I18N\.t\("btn\.connect"\)/.test(gate) &&
-        /btnAlt\.classList\.add\("hidden"\)/.test(gate));
-      this.check("gate: no paragraph above the button",
+      this.check("gate: no paragraph above the buttons",
         /gateText"\)\.textContent\s*=\s*""/.test(gate));
-      this.check("gate: that one button covers BOOT mode too",
-        /ways\[attempt % ways\.length\]/.test(gate));
+      this.check("gate: offers 'older firmware running' and 'in update mode' when there is a choice",
+        /btn\.connectRunning/.test(gate) && /btn\.connectUpdateMode/.test(gate));
+      this.check("gate: a single neutral button when there is no choice",
+        /btn\.connect"\)/.test(gate) && /btnAlt\.classList\.toggle\("hidden", !alt\)/.test(gate));
     }
 
     /* ------------------------------------- gate buttons stay answerable */

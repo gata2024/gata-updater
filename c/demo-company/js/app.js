@@ -308,14 +308,16 @@ const App = {
       const box = this.$("gateBox");
       const btn = this.$("gateBtn");
       const btnAlt = this.$("gateBtnAlt");
-      /* ONE button, always the same words, and no wall of text above it. The
-       * explanation still goes to the technical log for support, and the
-       * BOOT-mode guide sits folded away underneath for the rare first time
-       * on an old controller. */
+      /* No wall of text - the explanation goes to the technical log. Two
+       * buttons only where there is a genuine choice: a controller still
+       * running its old software, or one already sitting in update mode
+       * (a new controller, or one put there with B + R). Everywhere else a
+       * single neutral button. */
       this.$("gateText").textContent = "";
-      btn.textContent = I18N.t("btn.connect");
+      btn.textContent = alt ? I18N.t("btn.connectRunning") : I18N.t("btn.connect");
       btn.classList.remove("hidden");
-      btnAlt.classList.add("hidden");         // never a second button
+      btnAlt.classList.toggle("hidden", !alt);
+      if (alt) btnAlt.textContent = I18N.t("btn.connectUpdateMode");
       box.classList.remove("hidden");
       box.scrollIntoView({ behavior: "smooth", block: "center" });
       Util.warn("WAITING FOR YOU: " + title);
@@ -372,17 +374,8 @@ const App = {
       /* MUST be a real "click" handler: a browser opens a device chooser only
        * during a COMPLETED tap - pointerdown fires too early and the request
        * is refused with "Must be handling a user gesture". */
-      /* The one button covers both ways a controller can appear: a running
-       * one first, and - only if that press found nothing - one held in BOOT
-       * mode on the press after. Nothing to choose, nothing to read. */
-      const ways = alt ? [action, alt.action] : [action];
-      let attempt = 0;
-      btn.onclick = () => {
-        const fn = ways[attempt % ways.length];
-        attempt++;
-        run(fn)();
-      };
-      btnAlt.onclick = null;
+      btn.onclick = run(action);
+      btnAlt.onclick = alt ? run(alt.action) : null;
 
       if (poll) {
         pollTimer = setInterval(async () => {
