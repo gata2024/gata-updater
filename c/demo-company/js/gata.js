@@ -95,7 +95,14 @@ class GataBootloader {
     // Strict match: the running APPLICATION streams HMI frames on this same
     // port, and a loose "MCU" substring could false-match inside them.
     const r = await this.waitFor(["MCU:STM32"], 3000, ["UNKNOWN_COMMAND"]);
-    Util.ok("GATA controller answered - ready for the update.");
+    /* System firmware from 1.0.8 on reports itself, and shuts the cloud-module
+     * probe down by itself when no module answers - so the host no longer has
+     * to reboot the controller to make the upload safe. Older ones say
+     * nothing and keep the old handling. */
+    const m = /BL:(\d+)\.(\d+)\.(\d+)/.exec(r.text);
+    this.blVersion = m ? (Number(m[1]) * 65536 + Number(m[2]) * 256 + Number(m[3])) : 0;
+    Util.ok("GATA controller answered - ready for the update." +
+            (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] + ")" : ""));
     return r.text;
   }
 

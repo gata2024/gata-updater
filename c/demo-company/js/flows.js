@@ -567,7 +567,14 @@ const Flows = {
         } else {
           if (hasEsp && !ctx.pkg.esp) step("esp", "warn", I18N.t("d.espNoFiles"), 1);
           else step("esp", "done", I18N.t("d.espNone"), 1);
-          if (!ctx.demo) {
+          /* System firmware >= 1.0.8 shuts the probe down itself, so the
+           * defusing reboot is unnecessary - and every reboot costs a phone
+           * user a reconnect (the USB-OTG session dies with the device). */
+          const selfDefusing = (bl.blVersion || 0) >= 0x00010008;
+          if (selfDefusing) {
+            Util.info("Cloud-module check closed itself - no restart needed.");
+          }
+          if (!ctx.demo && !selfDefusing) {
             /* Defuse the failed-probe storm: reboot the board. The erased
              * app region keeps the bootloader in update mode afterwards. */
             Util.info("Rebooting the controller to clear the ESP probe (fresh start for the install)...");
