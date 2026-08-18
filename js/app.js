@@ -328,7 +328,10 @@ const App = {
           return;
         } catch (e) {
           if (e && (e.name === "NotFoundError" || /No (device|port) selected/i.test(e.message))) {
-            Util.warn("No device picked — waiting…");   // user dismissed the picker: let them retry
+            // The picker was dismissed - but an EMPTY picker looks identical
+            // to a cancelled one, so say which of the two it was.
+            Util.warn("No device picked — waiting…");
+            await this.explainEmptyPicker();
           } else {
             finish(false, e);
           }
@@ -347,6 +350,42 @@ const App = {
         }, 1000);
       }
     });
+  },
+
+  /* Report what the browser can actually SEE on USB. "The list was empty" and
+   * "I closed the list" produce the same error, and the causes are different:
+   * on a phone it is nearly always the OTG cable, an unpowered controller, or
+   * another app (the GATA HMI) already holding the device. */
+  async explainEmptyPicker() {
+    try {
+      const seen = [];
+      if (navigator.usb) {
+        for (const d of await navigator.usb.getDevices()) {
+          seen.push((d.productName || "USB device") +
+                    " " + d.vendorId.toString(16).padStart(4, "0") +
+                    ":" + d.productId.toString(16).padStart(4, "0"));
+        }
+      }
+      if (navigator.serial) {
+        for (const p of await navigator.serial.getPorts()) {
+          const i = p.getInfo ? p.getInfo() : {};
+          if (i.usbVendorId != null) {
+            seen.push("port " + i.usbVendorId.toString(16).padStart(4, "0") +
+                      ":" + (i.usbProductId || 0).toString(16).padStart(4, "0"));
+          }
+        }
+      }
+      if (seen.length) {
+        Util.info("The browser already has access to: " + seen.join(", ") +
+                  " — if the list was empty, the controller is not reachable right now.");
+      } else if (Transport.isAndroid()) {
+        Util.warn("The phone sees no controller. Check: the USB-OTG adapter is fully seated, " +
+                  "the controller is powered, and no other app (the GATA HMI) is connected to it — " +
+                  "close that app completely, then try again.");
+      } else {
+        Util.warn("No controller visible on USB. Check the cable, and that the controller is powered.");
+      }
+    } catch (e) { /* diagnostics must never break the flow */ }
   },
 
   showResult(ok, title, html) {
