@@ -308,17 +308,21 @@ const App = {
       const box = this.$("gateBox");
       const btn = this.$("gateBtn");
       const btnAlt = this.$("gateBtnAlt");
-      this.$("gateText").textContent = text;
-      btn.textContent = title;
-      btnAlt.classList.toggle("hidden", !alt);
-      if (alt) btnAlt.textContent = alt.label;
+      /* One short line, no buttons, no instructions to read. The detail that
+       * used to fill this box is still written to the technical log for
+       * support. */
+      this.$("gateText").textContent = I18N.t("gate.tap");
+      btn.classList.add("hidden");
+      btnAlt.classList.add("hidden");
       box.classList.remove("hidden");
       box.scrollIntoView({ behavior: "smooth", block: "center" });
       Util.warn("WAITING FOR YOU: " + title);
+      if (text) Util.info(text);
       let pollTimer = null;
-      const finish = (ok, value) => {
+      let finish = (ok, value) => {
         if (pollTimer) clearInterval(pollTimer);
         box.classList.add("hidden");
+        btn.classList.remove("hidden");        // restore for any other user
         if (ok) resolve(value); else reject(value);
       };
       /* Never leave the buttons dead. Disabling them while a device chooser is
@@ -360,13 +364,29 @@ const App = {
           asking = false;
         }
       };
-      btn.onclick = run(action);
-      btnAlt.onclick = alt ? run(alt.action) : null;
+      /* No button to hunt for: a browser only opens a device chooser during a
+       * real touch, so ANY touch on the page opens it. Successive touches
+       * alternate between the two ways a controller can appear (running, or
+       * held in BOOT mode), so nothing has to be chosen or explained. */
+      const actions = alt ? [action, alt.action] : [action];
+      let next = 0;
+      const onTouch = ev => {
+        // let real controls (Cancel, language, settings) work normally
+        if (ev.target.closest && ev.target.closest("button, a, select, summary, input")) return;
+        const fn = actions[next % actions.length];
+        next++;
+        run(fn)();
+      };
+      document.addEventListener("pointerdown", onTouch, true);
+      const stopTouch = () => document.removeEventListener("pointerdown", onTouch, true);
+      const origFinish = finish;
+      finish = (ok, value) => { stopTouch(); origFinish(ok, value); };
+
       if (poll) {
         pollTimer = setInterval(async () => {
           try {
             const v = await poll();
-            if (v != null) { Util.ok("Device detected — continuing automatically."); finish(true, v); }
+            if (v != null) { Util.ok("Controller detected — continuing automatically."); finish(true, v); }
           } catch (e) { /* keep polling */ }
         }, 1000);
       }
