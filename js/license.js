@@ -101,7 +101,11 @@ const License = {
     return payload;
   },
 
-  /* Re-verify whatever is stored (app start). Drops a broken/expired token. */
+  /* Re-verify whatever is stored (app start). Drops a broken/expired token.
+   * When nothing is stored, look for the BUNDLED license file: the uploader
+   * is handed to a customer with their `gata.license` file inside the folder,
+   * so the app licenses itself on first start - but the file is VERIFIED like
+   * any other license, never trusted just for being included. */
   async loadStored() {
     this._info = null;
     if (this.legacyPinned()) {
@@ -110,12 +114,36 @@ const License = {
       return this._info;
     }
     const token = localStorage.getItem(this.KEY);
-    if (!token) return null;
+    if (token) {
+      try {
+        this._info = await this.verify(token);
+        return this._info;
+      } catch (e) {
+        Util.warn("Stored license rejected: " + e.message);
+        localStorage.removeItem(this.KEY);
+      }
+    }
+    return await this.loadBundled();
+  },
+
+  /* The license file shipped inside the uploader folder (next to index.html).
+   * Absent file = simply unlicensed; a PRESENT but invalid file is reported. */
+  BUNDLED_FILE: "gata.license",
+  async loadBundled() {
+    if (location.protocol === "file:") return null;   // fetch() cannot read local files there
+    let text = null;
     try {
-      this._info = await this.verify(token);
+      const res = await fetch(this.BUNDLED_FILE, { cache: "no-store" });
+      if (res.ok) text = (await res.text()).trim();
+    } catch (e) { /* offline or not bundled - fine */ }
+    if (!text || !text.startsWith("GATA1.")) return null;
+    try {
+      this._info = await this.verify(text);
+      localStorage.setItem(this.KEY, text);   // works offline from now on
+      Util.ok("License file found with the uploader: " + this._info.customer +
+              " (channel " + this._info.channel + ").");
     } catch (e) {
-      Util.warn("Stored license rejected: " + e.message);
-      localStorage.removeItem(this.KEY);
+      Util.warn("The bundled license file was rejected: " + e.message);
       this._info = null;
     }
     return this._info;

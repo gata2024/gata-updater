@@ -162,6 +162,19 @@ const T = {
       const swsrc = await (await fetch("../sw.js", { cache: "no-store" })).text();
       this.check("license: license.js is part of the offline app shell", /js\/license\.js/.test(swsrc));
 
+      /* license FILE delivery: bundled with the uploader + openable in the UI */
+      const lsrc = await (await fetch("../js/license.js", { cache: "no-store" })).text();
+      this.check("license-file: the app auto-loads a bundled gata.license and still VERIFIES it",
+        /BUNDLED_FILE:\s*"gata\.license"/.test(lsrc) && /loadBundled/.test(lsrc) &&
+        /verify\(text\)/.test(lsrc));
+      const hsrc = await (await fetch("../index.html", { cache: "no-store" })).text();
+      this.check("license-file: the UI offers 'Open license file' (no pasted codes)",
+        /id="licFile"/.test(hsrc) && /btnLicOpen/.test(hsrc) && !/licInput/.test(hsrc));
+      const bundled = await (await fetch("../gata.license", { cache: "no-store" })).text();
+      const bp = await License.verify(bundled.trim());
+      this.check("license-file: the license bundled with THIS uploader verifies against the pinned key",
+        bp.channel === "default" && bp.customer === "General");
+
       /* package licenses (software bound to a channel by a signed .lic) */
       APP_CONFIG.licensePublicKey = { kty: pubJwk.kty, crv: pubJwk.crv, x: pubJwk.x, y: pubJwk.y };
       try {

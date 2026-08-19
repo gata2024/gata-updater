@@ -75,12 +75,12 @@ const App = {
     }
   },
 
-  async onLicActivate() {
+  async onLicFile(file) {
     const err = this.$("licError");
     err.classList.add("hidden");
     try {
-      await License.activate(this.$("licInput").value);
-      this.$("licInput").value = "";
+      const text = (await file.text()).trim();
+      await License.activate(text);
       this.renderLicense();
       localStorage.removeItem("gata.lastManifestDate");   // channels have their own timeline
       await this.loadManifest();
@@ -714,12 +714,20 @@ const App = {
       this.$("srcBadge").textContent = I18N.t("badge.cloud");
     };
 
-    this.$("btnLicActivate").onclick = () => this.onLicActivate();
-    this.$("btnLicChange").onclick = () => {
+    this.$("btnLicOpen").onclick = () => this.$("licFile").click();
+    this.$("licFile").onchange = e => {
+      if (e.target.files && e.target.files[0]) this.onLicFile(e.target.files[0]);
+      e.target.value = "";
+    };
+    this.$("btnLicChange").onclick = async () => {
       License.clear();
       this.manifest = null;
+      /* A bundled gata.license immediately re-licenses the app - "change"
+       * then means: pick a DIFFERENT file, so only fall back to the bundled
+       * one when the user does not choose anything. */
       this.renderVersions();
       this.renderLicense();
+      this.$("licFile").click();
     };
 
     this.$("selLang").onchange = e => this.changeLanguage(e.target.value);

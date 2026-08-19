@@ -95,8 +95,22 @@ Write-Host "== License for $Customer  (channel: $Channel, $(if ($Expires) { "exp
 Write-Host ""
 Write-Host $token
 Write-Host ""
+
+# ---- the LICENSE FILE (what actually gets handed to the customer) ----------
+$licDir = Join-Path $PSScriptRoot 'licenses'
+if (-not (Test-Path $licDir)) { New-Item -ItemType Directory -Force $licDir | Out-Null }
+$safeName = ($Customer -replace '[^0-9A-Za-z]', '_')
+$licFile = Join-Path $licDir ($safeName + '.gata.license')
+[IO.File]::WriteAllText($licFile, $token, (New-Object Text.UTF8Encoding $false))
+
 # keep a record next to the key so issued licenses are never lost
 $ledger = Join-Path $PSScriptRoot 'licenses_issued.txt'
 Add-Content -Path $ledger -Value ("{0}  {1,-12} {2,-10} {3}  {4}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm'), $Customer, $Channel, $Id, $token) -Encoding utf8
+
+Write-Host "License FILE written: $licFile" -ForegroundColor Green
+Write-Host ""
+Write-Host "How to deliver it:"
+Write-Host "  - WITH the uploader: copy it into the uploader folder RENAMED to 'gata.license'"
+Write-Host "    (next to index.html) - the app licenses itself on first start."
+Write-Host "  - separately: send the file; the customer clicks 'Open license file' in the app."
 Write-Host "Recorded in tools\licenses_issued.txt (kept out of git, like the key)."
-Write-Host "Send the token above to the customer - they paste it once into the app."

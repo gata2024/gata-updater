@@ -88,8 +88,8 @@ const I18N = {
       "foot.noUsb": "No USB support in this browser",
 
       "lic.title": "License",
-      "lic.enterHint": "Enter the license you received with the controller. It decides which software this updater installs. One time only — it stays on this device.",
-      "lic.activate": "Activate",
+      "lic.enterHint": "No license found. The license file normally comes inside the uploader folder (gata.license) — if you received it separately, open it here. It decides which software this updater installs. One time only — it stays on this device.",
+      "lic.open": "Open license file…",
       "lic.licensedTo": "Licensed to",
       "lic.change": "Change license",
       "lic.until": "(valid until {d})",
@@ -304,8 +304,8 @@ const I18N = {
       "foot.noUsb": "لا يدعم هذا المتصفح USB",
 
       "lic.title": "الترخيص",
-      "lic.enterHint": "أدخل الترخيص الذي استلمته مع وحدة التحكم. هو الذي يحدد أي برنامج يثبّته هذا المحدّث. مرة واحدة فقط — يبقى على هذا الجهاز.",
-      "lic.activate": "تفعيل",
+      "lic.enterHint": "لم يتم العثور على ترخيص. عادةً يأتي ملف الترخيص داخل مجلد المحدّث (gata.license) — إذا استلمته منفصلًا فافتحه هنا. هو الذي يحدد أي برنامج يثبّته هذا المحدّث. مرة واحدة فقط — يبقى على هذا الجهاز.",
+      "lic.open": "فتح ملف الترخيص…",
       "lic.licensedTo": "مرخّص لـ",
       "lic.change": "تغيير الترخيص",
       "lic.until": "(صالح حتى {d})",
@@ -520,8 +520,8 @@ const I18N = {
       "foot.noUsb": "Bu tarayıcıda USB desteği yok",
 
       "lic.title": "Lisans",
-      "lic.enterHint": "Kontrol ünitesiyle birlikte aldığınız lisansı girin. Bu güncelleyicinin hangi yazılımı kuracağına lisans karar verir. Yalnızca bir kez — bu cihazda kalır.",
-      "lic.activate": "Etkinleştir",
+      "lic.enterHint": "Lisans bulunamadı. Lisans dosyası normalde güncelleyici klasörünün içinde gelir (gata.license) — ayrı aldıysanız buradan açın. Bu güncelleyicinin hangi yazılımı kuracağına lisans karar verir. Yalnızca bir kez — bu cihazda kalır.",
+      "lic.open": "Lisans dosyasını aç…",
       "lic.licensedTo": "Lisans sahibi",
       "lic.change": "Lisansı değiştir",
       "lic.until": "({d} tarihine kadar geçerli)",

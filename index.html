@@ -45,10 +45,10 @@
       <h2 data-i18n="lic.title">License</h2>
     </div>
     <div id="licEnter">
-      <p class="muted" data-i18n="lic.enterHint">Enter the license you received with the controller. It decides which software this updater installs. One time only — it stays on this device.</p>
-      <textarea id="licInput" rows="3" spellcheck="false" placeholder="GATA1.…"></textarea>
+      <p class="muted" data-i18n="lic.enterHint">No license found. The license file normally comes inside the uploader folder (gata.license) — if you received it separately, open it here. It decides which software this updater installs. One time only — it stays on this device.</p>
+      <input type="file" id="licFile" accept=".license,.lic,.txt,.gata" hidden>
       <div class="row gap">
-        <button id="btnLicActivate" class="btn prime" data-i18n="lic.activate">Activate</button>
+        <button id="btnLicOpen" class="btn prime" data-i18n="lic.open">Open license file…</button>
       </div>
       <p id="licError" class="err small hidden"></p>
     </div>
