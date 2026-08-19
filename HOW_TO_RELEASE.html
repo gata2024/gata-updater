@@ -40,8 +40,26 @@ automatically connects their cloud updates to <b>their channel</b>. Channels tod
   <tr><td>Danway</td><td><code>danway</code></td><td><code>tools\licenses\Danway.gata.license</code></td><td><code>-Customer danway</code></td></tr>
 </table>
 
-<div class="note">Every command below runs in <b>PowerShell</b>, from
-<code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools</code> unless said otherwise.</div>
+<div class="note" style="border-left-color:#6cd08a">
+<b style="font-size:16px">👉 The easy way: <code>GATA_Release_Manager.exe</code></b><br><br>
+Double-click it in the uploader folder and do everything with buttons — no commands at all:
+<ul style="margin:8px 0">
+  <li><b>PUBLISH TO CLOUD</b> — pick the company + boards, press once. Both board revisions in one go.</li>
+  <li><b>BUILD CUSTOMER UPLOADER FOLDER</b> — makes their ready-to-send folder: app + <b>their</b> license file
+      + <b>their</b> latest firmware, with your keys automatically left out.</li>
+  <li><b>Add new company…</b> — creates their channel and their license file.</li>
+  <li><b>Back up keys</b> — copies both keys, the keystore and all issued licenses to a USB stick.</li>
+</ul>
+It runs the very same scripts described below and prints every command it used, so you can always check or
+repeat it by hand. <b>Never send this program to a customer</b> — it is your release tool.<br>
+<span class="ok">If it is missing, build it once:</span>
+<pre style="margin:8px 0 0"><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\build_release_manager.ps1</code></pre>
+</div>
+
+<p style="margin-top:26px"><b>The manual way</b> (what the buttons do). Every command below runs in
+<b>PowerShell</b>, from
+<code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools</code> unless said otherwise.</p>
 
 <!-- ================================================================ -->
 <h2>1 &nbsp;Publish new firmware to the cloud</h2>
