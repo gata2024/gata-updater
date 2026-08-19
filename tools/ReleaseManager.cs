@@ -35,7 +35,7 @@ class ReleaseManager : Form
     ProgressBar bar;
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -55,6 +55,19 @@ class ReleaseManager : Form
                             "GATA Release Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+
+        /* Headless folder build - same code as the button, for scripting and
+         * for checking a folder without clicking:
+         *     GATA_Release_Manager.exe /buildfolder <channel> <parent folder>  */
+        if (args.Length >= 3 && args[0].Equals("/buildfolder", StringComparison.OrdinalIgnoreCase))
+        {
+            var f = new ReleaseManager();
+            f.BuildFolderCore(args[1], Path.Combine(args[2],
+                "Uploader_" + (args[1] == "default" ? "General" : Pretty(args[1])).Replace(" ", "_")),
+                s => Console.WriteLine(s));
+            return;
+        }
+
         Application.Run(new ReleaseManager());
     }
 
@@ -366,31 +379,18 @@ class ReleaseManager : Form
         {
             try
             {
-                Status("Copying the app...");
-                Log("");
-                Log("=== Building " + dest + " ===");
-
-                // Copy the app WITHOUT keys, the firmware repo, tests and build junk.
-                string[] skipDirs = { ".git", "firmware", "tools", "android", "tests", "c", "dist", ".playwright-mcp", "node_modules" };
-                CopyTree(AppDir, dest, skipDirs);
-                Log("   app files copied.");
-
-                // their license
-                File.Copy(licFile, Path.Combine(dest, "gata.license"), true);
-                Log("   license: " + Path.GetFileName(licFile) + "  ->  gata.license");
-
-                // their offline firmware, taken from what was last published on their channel
-                Status("Adding the offline firmware files...");
-                int n = CopyLatestFirmware(channel, dest);
-                Log("   offline firmware files copied: " + n);
-
+                Status("Building...");
+                var problems = BuildFolderCore(channel, dest, Log);
+                if (problems.Count > 0)
+                {
+                    Status("Folder built BUT the check found problems - see the log.");
+                    MessageBox.Show("The folder was built but the check found problems:\n\n" +
+                                    string.Join("\n", problems.ToArray()) +
+                                    "\n\nDo not send it until this is fixed.",
+                                    "Check failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 Status("Done - folder ready to send.");
-                Log("=== DONE ===");
-                Log("Send the whole folder to " + who + ". They run CLICK_ME_START_ON_PC.bat.");
-                if (n == 0)
-                    Log("NOTE: no published firmware found for this channel - the folder has no offline .bin files yet " +
-                        "(the customer will still get cloud updates). Publish first, then build the folder again.");
-
                 if (MessageBox.Show("Folder ready:\n\n" + dest + "\n\nOpen it now?", "Done",
                                     MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                     Process.Start("explorer.exe", "\"" + dest + "\"");
@@ -398,6 +398,94 @@ class ReleaseManager : Form
             catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
             finally { Busy(false); }
         }) { IsBackground = true }.Start();
+    }
+
+    /* The actual folder build - shared by the button and by /buildfolder, so
+     * what is tested from the command line is exactly what the button does.
+     * Returns the list of problems found (empty = good to send). */
+    public List<string> BuildFolderCore(string channel, string dest, Action<string> log)
+    {
+        string who = channel == "default" ? "General" : Pretty(channel);
+        string licFile = FindLicenseFile(channel);
+        var problems = new List<string>();
+
+        log("=== Building " + dest + " ===");
+        if (licFile == null) { problems.Add("MISSING: no license file for channel '" + channel + "'"); return problems; }
+
+        /* Rebuilding on top of an older folder would leave its stale files
+         * behind (an old firmware .bin, or junk from a previous version of
+         * this tool). Clear it first - but ONLY when it really is a previously
+         * built uploader folder, never an arbitrary folder someone picked. */
+        if (Directory.Exists(dest))
+        {
+            bool empty = Directory.GetFileSystemEntries(dest).Length == 0;
+            bool isUploader = File.Exists(Path.Combine(dest, "index.html")) &&
+                              File.Exists(Path.Combine(dest, "CLICK_ME_START_ON_PC.bat"));
+            if (!empty && !isUploader)
+            {
+                problems.Add("The folder already exists and does not look like an uploader folder: " + dest);
+                log("   !! refusing to overwrite " + dest);
+                return problems;
+            }
+            if (!empty)
+            {
+                foreach (string d in Directory.GetDirectories(dest))
+                    try { Directory.Delete(d, true); } catch (Exception ex) { log("   ! could not remove old " + Path.GetFileName(d) + ": " + ex.Message); }
+                foreach (string f in Directory.GetFiles(dest))
+                    try { File.Delete(f); } catch { }
+                log("   previous contents cleared.");
+            }
+        }
+
+        /* Only what a customer actually needs. Everything else is left out:
+         * your keys and release scripts (tools\), the firmware server repo,
+         * the Android keystore, tests, screenshots, the old per-customer
+         * copies, and your internal notes. */
+        CopyTree(AppDir, dest);
+        log("   app files copied.");
+
+        /* tools\ is NOT copied wholesale (it holds signing_key.json and
+         * license_key.json). The launcher needs exactly these few, so copy
+         * just them - without this the .bat fails with
+         * "the argument tools\serve.ps1 ... does not exist". */
+        string custTools = Path.Combine(dest, "tools");
+        Directory.CreateDirectory(custTools);
+        foreach (string t in CustomerTools)
+        {
+            string src = Path.Combine(ToolsDir, t);
+            if (File.Exists(src)) { File.Copy(src, Path.Combine(custTools, t), true); log("   tools\\" + t); }
+            else log("   ! missing (skipped): tools\\" + t);
+        }
+
+        File.Copy(licFile, Path.Combine(dest, "gata.license"), true);
+        log("   license: " + Path.GetFileName(licFile) + "  ->  gata.license");
+
+        int n = CopyLatestFirmware(channel, dest, log);
+        log("   offline firmware files copied: " + n);
+
+        /* Prove the folder works before it is handed over: every script the
+         * launcher calls must be present, the license must be there, and none
+         * of your secrets may have leaked in. */
+        foreach (string need in new[] { "index.html", "CLICK_ME_START_ON_PC.bat", "gata.license",
+                                        @"tools\serve.ps1", @"tools\check_auto_connect.ps1",
+                                        @"tools\enable_auto_connect.ps1", @"js\app.js", @"js\license.js" })
+            if (!File.Exists(Path.Combine(dest, need))) problems.Add("MISSING: " + need);
+        foreach (string secret in new[] { @"tools\signing_key.json", @"tools\license_key.json",
+                                          @"tools\licenses_issued.txt", @"tools\publish_firmware.ps1",
+                                          @"tools\make_license.ps1", "GATA_Release_Manager.exe" })
+            if (File.Exists(Path.Combine(dest, secret))) problems.Add("MUST NOT BE THERE: " + secret);
+        if (Directory.Exists(Path.Combine(dest, "firmware"))) problems.Add("MUST NOT BE THERE: firmware\\");
+        if (Directory.Exists(Path.Combine(dest, "android"))) problems.Add("MUST NOT BE THERE: android\\");
+
+        if (problems.Count > 0) { foreach (string p in problems) log("   !! " + p); return problems; }
+
+        log("   check passed: launcher scripts present, no keys included.");
+        log("=== DONE ===");
+        log("Send the whole folder to " + who + ". They run CLICK_ME_START_ON_PC.bat.");
+        if (n == 0)
+            log("NOTE: no published firmware found for this channel - the folder has no offline .bin files yet " +
+                "(the customer will still get cloud updates). Publish first, then build the folder again.");
+        return problems;
     }
 
     string FindLicenseFile(string channel)
@@ -431,7 +519,7 @@ class ReleaseManager : Form
     /* Copy the newest published controller/system/esp files of a channel into
      * the customer folder's offline directories. Reads the channel manifest so
      * exactly the files of the LATEST version are taken. */
-    int CopyLatestFirmware(string channel, string dest)
+    int CopyLatestFirmware(string channel, string dest, Action<string> log)
     {
         string manPath = channel == "default"
             ? Path.Combine(FirmwareDir, "manifest.json")
@@ -473,7 +561,7 @@ class ReleaseManager : Form
             bool isEsp = clean.IndexOf("esp\\", StringComparison.OrdinalIgnoreCase) >= 0;
             string target = Path.Combine(isEsp ? cloudDir : mainDir, name);
             File.Copy(src, target, true);
-            Log("      " + name);
+            log("      " + name);
             n++;
         }
         return n;
@@ -494,22 +582,46 @@ class ReleaseManager : Form
         return json.Substring(start);
     }
 
-    void CopyTree(string src, string dst, string[] skipDirs)
+    /* The only tools\ scripts a customer's launcher calls. Everything else in
+     * tools\ is YOURS (keys, publishing, this program's source). */
+    static readonly string[] CustomerTools = {
+        "serve.ps1", "check_auto_connect.ps1", "enable_auto_connect.ps1",
+        "install_dfu_driver.ps1", "INSTALL_DFU_DRIVER.bat"
+    };
+
+    /* Folders that must never reach a customer: your keys and scripts, the
+     * firmware server repo, the Android signing keystore, tests, screenshots,
+     * the old per-customer app copies, packaging output, tooling caches. */
+    static readonly string[] SkipDirs = {
+        ".git", "firmware", "tools", "android", "tests", "c", "dist", "docs",
+        ".playwright-mcp", "node_modules", ".vscode"
+    };
+
+    /* Internal notes and your own release tool - not part of the product. */
+    static readonly string[] SkipFiles = {
+        "gata.license",                     // replaced with THEIR license
+        "GATA_Release_Manager.exe",         // your tool, never ship it
+        "HOW_TO_RELEASE.html", "OPERATIONS.md", "README.md",
+        "changes_from_rev5_to_rev6.json",
+        ".gitignore", ".gitattributes"
+    };
+
+    void CopyTree(string src, string dst)
     {
         Directory.CreateDirectory(dst);
         foreach (string f in Directory.GetFiles(src))
         {
             string name = Path.GetFileName(f);
-            if (name.Equals("gata.license", StringComparison.OrdinalIgnoreCase)) continue;  // replaced below
-            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                name.IndexOf("Release", StringComparison.OrdinalIgnoreCase) >= 0) continue; // not this tool
+            if (SkipFiles.Any(s => s.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
+            if (name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;      // sources
+            if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;     // packaging
             File.Copy(f, Path.Combine(dst, name), true);
         }
         foreach (string d in Directory.GetDirectories(src))
         {
             string name = Path.GetFileName(d);
-            if (skipDirs.Any(s => s.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
-            CopyTree(d, Path.Combine(dst, name), skipDirs);
+            if (SkipDirs.Any(s => s.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
+            CopyTree(d, Path.Combine(dst, name));
         }
     }
 
