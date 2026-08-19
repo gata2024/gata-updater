@@ -59,12 +59,37 @@ const License = {
     let payload;
     try { payload = JSON.parse(new TextDecoder().decode(payloadBytes)); }
     catch (e) { throw new Error(I18N.t("lic.badFormat")); }
-    if (!payload.channel || !payload.customer) throw new Error(I18N.t("lic.badFormat"));
+    if (payload.t || !payload.channel || !payload.customer) throw new Error(I18N.t("lic.badFormat"));
     if (payload.exp) {
       const today = new Date().toISOString().slice(0, 10);
       if (today > payload.exp) throw new Error(I18N.t("lic.expired", { d: payload.exp }));
     }
     return payload;
+  },
+
+  /* PACKAGE licenses: every published version carries a .lic token that binds
+   * that exact software (by hash) to a channel. Same signature machinery,
+   * different payload shape (t:"pkg", no customer) - so a customer license
+   * can never be replayed as a package license or the other way round. */
+  async verifyPackage(token) {
+    token = String(token || "").trim();
+    const parts = token.split(".");
+    if (parts.length !== 3 || parts[0] !== "GATA1") throw new Error(I18N.t("lic.badFormat"));
+    if (!APP_CONFIG.licensePublicKey) throw new Error("No license public key pinned in this build.");
+    const payloadBytes = this._b64uToBytes(parts[1]);
+    const sigBytes = this._b64uToBytes(parts[2]);
+    let ok = false;
+    try {
+      const key = await crypto.subtle.importKey("jwk", APP_CONFIG.licensePublicKey,
+        { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+      ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, sigBytes, payloadBytes);
+    } catch (e) { ok = false; }
+    if (!ok) throw new Error(I18N.t("lic.badSig"));
+    let p;
+    try { p = JSON.parse(new TextDecoder().decode(payloadBytes)); }
+    catch (e) { throw new Error(I18N.t("lic.badFormat")); }
+    if (p.t !== "pkg" || !p.version) throw new Error(I18N.t("lic.badFormat"));
+    return p;
   },
 
   /* Verify + store. Returns the payload; throws on a bad token. */

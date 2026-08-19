@@ -161,6 +161,33 @@ const T = {
         /if \(!License\.licensed\(\)\)/.test(asrc));
       const swsrc = await (await fetch("../sw.js", { cache: "no-store" })).text();
       this.check("license: license.js is part of the offline app shell", /js\/license\.js/.test(swsrc));
+
+      /* package licenses (software bound to a channel by a signed .lic) */
+      APP_CONFIG.licensePublicKey = { kty: pubJwk.kty, crv: pubJwk.crv, x: pubJwk.x, y: pubJwk.y };
+      try {
+        const pkgTok = await mk({ t: "pkg", version: "1_1_26_X_rev5", channel: "ksp",
+                                  board: "rev5", controller: "aabbcc", issued: "2026-08-20" });
+        const pp = await License.verifyPackage(pkgTok);
+        this.check("pkg-license: a signed package token verifies",
+          pp.version === "1_1_26_X_rev5" && pp.channel === "ksp" && pp.controller === "aabbcc");
+        let cross1 = null;
+        try { await License.verify(pkgTok); } catch (e) { cross1 = e; }
+        this.check("pkg-license: a package token is NOT accepted as a customer license", !!cross1);
+        let cross2 = null;
+        const custTok = await mk({ customer: "KSP", channel: "ksp", id: "T-9" });
+        try { await License.verifyPackage(custTok); } catch (e) { cross2 = e; }
+        this.check("pkg-license: a customer license is NOT accepted as a package license", !!cross2);
+      } finally {
+        APP_CONFIG.licensePublicKey = saved;
+      }
+      const csrc = await (await fetch("../js/cloud.js", { cache: "no-store" })).text();
+      this.check("pkg-license: downloads verify the package license and bind version+channel+hash",
+        /ver\.license && ver\.license\.url/.test(csrc) &&
+        /verifyPackage/.test(csrc) && /lic\.version === ver\.version/.test(csrc) &&
+        /activeChannel\(\)/.test(csrc));
+      const psrc = await (await fetch("../tools/publish_firmware.ps1", { cache: "no-store" })).text();
+      this.check("pkg-license: every publish attaches a signed .lic",
+        /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
     /* ------------------------------------------------- manifest signing */

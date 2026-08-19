@@ -351,6 +351,37 @@ const Cloud = {
     const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
     const pkg = { controller: null, system: null, esp: null };
 
+    /* Package license: versions published with a .lic file are BOUND to a
+     * channel and to their exact controller binary (by hash). The token must
+     * verify against the pinned license key AND match this app's customer
+     * license - so a package copied out of another customer's channel refuses
+     * to install here. Versions without one (published before licensing) are
+     * accepted as legacy. */
+    if (ver.license && ver.license.url) {
+      const licBytes = await this.download(manifest, ver.license, "Package license", () => {});
+      let lic;
+      try {
+        lic = await License.verifyPackage(new TextDecoder().decode(licBytes));
+      } catch (e) {
+        const err = new UploaderError(I18N.t("err.pkgLic", { v: ver.version }) + " (" + e.message + ")",
+          I18N.t("hint.pkgLic"));
+        err.fatal = true;
+        throw err;
+      }
+      const ctrl = this.controllerEntry(ver);
+      const boundOk =
+        lic.version === ver.version &&
+        (lic.channel || "default") === this.activeChannel() &&
+        (!ctrl || !ctrl.sha256 || !lic.controller ||
+          lic.controller.toLowerCase() === ctrl.sha256.toLowerCase());
+      if (!boundOk) {
+        const err = new UploaderError(I18N.t("err.pkgLic", { v: ver.version }), I18N.t("hint.pkgLic"));
+        err.fatal = true;
+        throw err;
+      }
+      Util.ok("Package license verified: " + ver.version + " is licensed for this channel.");
+    }
+
     if (n.controller) {
       const entry = this.controllerEntry(ver);
       if (!entry || !entry.url) throw new UploaderError("This version has no controller software file.");

@@ -188,6 +188,52 @@ if (-not $NoEsp) {
     }
 }
 
+# ---------------------------------------------------------------- package license
+# Every release ships a signed .lic that binds THIS software (by controller
+# hash) to THIS channel. The app refuses to install a package whose license
+# does not match the customer's own license. Signed with tools\license_key.json
+# (the same key that mints customer licenses).
+$licEntry = $null
+$licKeyPath = Join-Path $PSScriptRoot 'license_key.json'
+if (Test-Path $licKeyPath) {
+    function B64UrlL([byte[]]$b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+','-').Replace('/','_') }
+    function FromB64UrlL([string]$s) {
+        $t = $s.Replace('-','+').Replace('_','/')
+        switch ($t.Length % 4) { 2 { $t += '==' } 3 { $t += '=' } }
+        [Convert]::FromBase64String($t)
+    }
+    $ljwk = Get-Content $licKeyPath -Raw | ConvertFrom-Json
+    $lp = New-Object System.Security.Cryptography.ECParameters
+    $lp.Curve = [System.Security.Cryptography.ECCurve]::CreateFromFriendlyName('nistP256')
+    $lp.D = FromB64UrlL $ljwk.d
+    $lq = $lp.Q; $lq.X = FromB64UrlL $ljwk.x; $lq.Y = FromB64UrlL $ljwk.y; $lp.Q = $lq
+    $lec = [System.Security.Cryptography.ECDsa]::Create()
+    $lec.ImportParameters($lp)
+
+    $licPayload = [ordered]@{
+        t          = 'pkg'
+        version    = $Version
+        channel    = $Customer
+        board      = $Board
+        controller = $entryMain.sha256
+        issued     = $Date
+    }
+    $licJson  = ($licPayload | ConvertTo-Json -Compress)
+    $licBytes = [Text.Encoding]::UTF8.GetBytes($licJson)
+    $licSig   = $lec.SignData($licBytes, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    $licToken = 'GATA1.' + (B64UrlL $licBytes) + '.' + (B64UrlL $licSig)
+
+    $licName = 'licenses/' + ($Version -replace '[^0-9A-Za-z]', '_') + '.lic'
+    $licDest = Join-Path $FirmwareDir ($licName -replace '/', '\')
+    $licDir  = Split-Path -Parent $licDest
+    if (-not (Test-Path $licDir)) { New-Item -ItemType Directory -Force $licDir | Out-Null }
+    [IO.File]::WriteAllText($licDest, $licToken, (New-Object Text.UTF8Encoding $false))
+    $licEntry = New-FileEntry $licDest $licName
+    Write-Host "  license    : $licName (binds this software to channel '$Customer')"
+} else {
+    Write-Host "  license    : SKIPPED - tools\license_key.json not found (run make_license.ps1 once)" -ForegroundColor Yellow
+}
+
 # ---------------------------------------------------------------- manifest
 $newVersion = [ordered]@{
     version = $Version
@@ -199,6 +245,7 @@ $newVersion = [ordered]@{
     system     = $entrySystem
 }
 if ($espEntry) { $newVersion["esp"] = $espEntry }
+if ($licEntry) { $newVersion["license"] = $licEntry }
 
 foreach ($old in $manifest.versions) {
     if ($old.PSObject.Properties["latest"]) { $old.latest = $false }
