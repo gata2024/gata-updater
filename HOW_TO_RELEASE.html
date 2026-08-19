@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GATA — how to release firmware & build customer uploaders</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.55 system-ui, Segoe UI, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px;
+         background: #0f1420; color: #dbe4f5; }
+  h1 { font-size: 24px; } h2 { font-size: 19px; margin-top: 38px; border-bottom: 1px solid #2a3550; padding-bottom: 6px; }
+  h3 { font-size: 15px; margin-top: 24px; color: #9fb4d8; }
+  code { background: #1a2336; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+  pre { position: relative; background: #131b2c; border: 1px solid #2a3550; border-radius: 10px;
+        padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .copy { position: absolute; top: 8px; right: 8px; border: 1px solid #33415e; background: #1d2740;
+          color: #cdd9f0; border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .copy:active { background: #2c3a5e; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th, td { border: 1px solid #2a3550; padding: 7px 10px; text-align: left; font-size: 14px; }
+  th { background: #16203a; }
+  .note { background: #16203a; border-left: 4px solid #4a7bd0; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .warn { background: #2b1c1c; border-left: 4px solid #d05050; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .ok   { color: #6cd08a; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<h1>GATA firmware releases &amp; customer uploaders</h1>
+<p>The model: <b>one updater app</b>. Each company gets a folder copy containing <b>their license file</b>
+(<code>gata.license</code>) and <b>their offline .bin files</b>. The license carries the company name and
+automatically connects their cloud updates to <b>their channel</b>. Channels today:</p>
+
+<table>
+  <tr><th>Company</th><th>Channel</th><th>License file (already made)</th><th>Publish flag</th></tr>
+  <tr><td>General (everyone)</td><td><code>default</code></td><td><code>tools\licenses\General.gata.license</code></td><td><i>(no flag)</i></td></tr>
+  <tr><td>KSP</td><td><code>ksp</code></td><td><code>tools\licenses\KSP.gata.license</code></td><td><code>-Customer ksp</code></td></tr>
+  <tr><td>Danway</td><td><code>danway</code></td><td><code>tools\licenses\Danway.gata.license</code></td><td><code>-Customer danway</code></td></tr>
+</table>
+
+<div class="note">Every command below runs in <b>PowerShell</b>, from
+<code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools</code> unless said otherwise.</div>
+
+<!-- ================================================================ -->
+<h2>1 &nbsp;Publish new firmware to the cloud</h2>
+
+<p>The three build outputs always come from the same places:</p>
+<table>
+  <tr><th>What</th><th>File</th></tr>
+  <tr><td>Controller software</td><td><code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin</code></td></tr>
+  <tr><td>System firmware</td><td><code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin</code></td></tr>
+  <tr><td>Cloud module (ESP32)</td><td><code>D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev</code> (folder)</td></tr>
+</table>
+
+<h3>General — publish for both boards (run both commands)</h3>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\publish_firmware.ps1 -Board rev5 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"
+.\publish_firmware.ps1 -Board rev6 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"</code></pre>
+
+<h3>KSP — same, plus <code>-Customer ksp</code></h3>
+<pre><button class="copy">Copy</button><code>.\publish_firmware.ps1 -Customer ksp -Board rev5 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"
+.\publish_firmware.ps1 -Customer ksp -Board rev6 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"</code></pre>
+
+<h3>Danway — same, plus <code>-Customer danway</code></h3>
+<pre><button class="copy">Copy</button><code>.\publish_firmware.ps1 -Customer danway -Board rev5 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"
+.\publish_firmware.ps1 -Customer danway -Board rev6 -Main "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" -System "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" -EspDir "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev" -Notes "what changed"</code></pre>
+
+<div class="note">Leave <code>-Version</code> out and the name is made for you:
+<code>20_08_26_KSP_rev5</code> (day_month_year_Company_board). The version is signed, gets its own
+<code>.lic</code> package license automatically, and the script pushes it to GitHub — every customer's app
+sees it on next start. Skip <code>-EspDir</code>? Then it reuses the ESP files already in the folder.
+No new system firmware? You can leave <code>-System</code> out too (it reuses the newest one).</div>
+
+<div class="warn">If the push fails with <i>git.gatasys.com authentication</i> (the company mirror), the GitHub
+publish usually still went through. To push GitHub by hand:
+<pre style="margin:8px 0 0"><button class="copy">Copy</button><code>git -C D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware push https://github.com/gata2024/gata-firmware.git main</code></pre></div>
+
+<!-- ================================================================ -->
+<h2>2 &nbsp;Build a customer's uploader folder (offline files + their license)</h2>
+
+<p>Example for <b>KSP</b> — replace <code>ksp/KSP</code> with <code>danway/Danway</code> for Danway.</p>
+
+<h3>Step 1 — copy the app (WITHOUT your secret keys and the server folder)</h3>
+<pre><button class="copy">Copy</button><code>robocopy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader" "D:\Uploader_KSP" /E /XD .git firmware tools android tests c .playwright-mcp dist /XF gata.license</code></pre>
+
+<h3>Step 2 — put THEIR license in</h3>
+<pre><button class="copy">Copy</button><code>copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools\licenses\KSP.gata.license" "D:\Uploader_KSP\gata.license"</code></pre>
+
+<h3>Step 3 — put THEIR offline .bin files in</h3>
+<p>Take the files of the version you published for them (they are in the <code>firmware\</code> folder after publishing):</p>
+<pre><button class="copy">Copy</button><code>copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\controller_20_08_26_KSP_rev6.bin" "D:\Uploader_KSP\main_firmware\"
+copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\system_20_08_26_KSP_rev6.bin"     "D:\Uploader_KSP\main_firmware\"
+copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\esp\20_08_26_KSP_rev6\*"          "D:\Uploader_KSP\cloud_firmware\"</code></pre>
+<p>(Adjust the version name to the one you actually published. Delete any OLD bins already in
+<code>main_firmware\</code> first so there is no confusion.)</p>
+
+<h3>Step 4 — send the whole <code>D:\Uploader_KSP</code> folder (zip it)</h3>
+<p>The customer runs <code>CLICK_ME_START_ON_PC.bat</code>. The app licenses itself as
+<b>KSP</b> from the file, works offline with the included bins ("Use the files in the uploader folder"),
+and gets <b>KSP cloud updates</b> automatically whenever they have internet. Nothing to type, ever.</p>
+
+<div class="warn"><b>Never</b> include in a customer copy: <code>tools\</code> (has <code>signing_key.json</code> +
+<code>license_key.json</code> — the keys of the whole system), <code>firmware\</code> (the whole server repo),
+<code>android\</code> (the store keystore). The robocopy command above already excludes them.</div>
+
+<!-- ================================================================ -->
+<h2>3 &nbsp;Where to put .bin files manually (offline updates)</h2>
+<p>Inside any uploader folder — yours or a customer's:</p>
+<table>
+  <tr><th>Folder</th><th>Files</th><th>Naming</th></tr>
+  <tr><td><code>main_firmware\</code></td><td>system firmware + controller software</td>
+      <td><code>system_&lt;anything&gt;.bin</code> and <code>controller_&lt;anything&gt;.bin</code> (old names <code>B1.bin</code>/<code>M*.bin</code> also work)</td></tr>
+  <tr><td><code>cloud_firmware\</code></td><td>the 4 ESP32 files</td>
+      <td>exactly: <code>bootloader.bin</code>, <code>partitions.bin</code>, <code>boot_app0.bin</code>, <code>firmware.bin</code></td></tr>
+</table>
+<p>Then in the app press <b>“Use the files in the uploader folder”</b> → <b>Scan again</b> if needed.</p>
+
+<!-- ================================================================ -->
+<h2>4 &nbsp;New company (one time each)</h2>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\new_customer.ps1 -Id acme -Name "ACME Water"
+.\make_license.ps1 -Customer "ACME Water" -Channel acme</code></pre>
+<p>That creates their cloud channel (seeded from General) and writes
+<code>tools\licenses\ACME_Water.gata.license</code>. Then publish with <code>-Customer acme</code>
+and build their folder as in section 2.</p>
+
+<!-- ================================================================ -->
+<h2>5 &nbsp;Back these up (they ARE the business)</h2>
+<ul>
+  <li><code>tools\signing_key.json</code> — signs every firmware list; without it you cannot release.</li>
+  <li><code>tools\license_key.json</code> — mints licenses; anyone holding it can license anything.</li>
+  <li><code>android\gata-release.keystore</code> — signs the Android app.</li>
+  <li><code>tools\licenses_issued.txt</code> + <code>tools\licenses\</code> — every license you ever issued.</li>
+</ul>
+
+<script>
+document.querySelectorAll(".copy").forEach(btn => {
+  btn.onclick = () => {
+    const code = btn.parentElement.querySelector("code").innerText;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = "Copied ✓";
+      setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+    });
+  };
+});
+</script>
+</body>
+</html>
