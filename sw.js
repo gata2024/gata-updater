@@ -19,7 +19,7 @@ const SHELL = [
   "icon-192.png", "icon-512.png", "icon-512-maskable.png", "icon-180.png",
   "img/boot-buttons.svg",
   "js/config.js", "js/i18n.js", "js/util.js", "js/validate.js",
-  "js/dfuse.js", "js/transport.js", "js/gata.js",
+  "js/license.js", "js/dfuse.js", "js/transport.js", "js/gata.js",
   "js/esp.js", "js/cloud.js", "js/localsource.js", "js/mock.js", "js/flows.js", "js/app.js",
 ];
 

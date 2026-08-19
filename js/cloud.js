@@ -31,15 +31,30 @@ const Cloud = {
     else localStorage.removeItem("gata.manifestUrl");
   },
 
+  /* The channel this app serves: the license decides (legacy per-customer
+   * packages keep their pinned config channel via License.legacyPinned()). */
+  activeChannel() {
+    if (typeof License !== "undefined" && License.licensed()) return License.channel();
+    return APP_CONFIG.channel || "default";
+  },
+
+  /* A channel's manifest lives NEXT TO the default one: customers/<id>/
+   * manifest.json under the same firmware root, for every source kind. */
+  channelize(url, channel) {
+    if (!channel || channel === "default") return url;
+    return url.replace(/manifest\.json$/, "customers/" + channel + "/manifest.json");
+  },
+
   /* Sources to try, best first. A URL set in Settings wins outright. */
   manifestUrlCandidates() {
     const custom = localStorage.getItem("gata.manifestUrl");
     if (custom && custom.trim()) return [custom.trim()];
+    const ch = this.activeChannel();
     const list = [];
     const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-    if (APP_CONFIG.cloudManifestUrl) list.push(APP_CONFIG.cloudManifestUrl);
-    if (local && APP_CONFIG.proxyManifestUrl) list.push(APP_CONFIG.proxyManifestUrl);
-    if (APP_CONFIG.defaultManifestUrl) list.push(APP_CONFIG.defaultManifestUrl);
+    if (APP_CONFIG.cloudManifestUrl) list.push(this.channelize(APP_CONFIG.cloudManifestUrl, ch));
+    if (local && APP_CONFIG.proxyManifestUrl) list.push(this.channelize(APP_CONFIG.proxyManifestUrl, ch));
+    if (APP_CONFIG.defaultManifestUrl) list.push(this.channelize(APP_CONFIG.defaultManifestUrl, ch));
     return list;
   },
 
@@ -132,12 +147,13 @@ const Cloud = {
     Util.ok("Firmware list signature verified (ECDSA P-256).");
   },
 
-  /* This copy of the app belongs to one customer channel; the channel id is
-   * part of the SIGNED manifest, so a mixed-up or swapped URL cannot feed a
-   * customer another customer's firmware. Older unsigned-era lists carry no
-   * channel field - those are accepted only by the shared "default" app. */
+  /* This app serves one customer channel (from the LICENSE, or pinned in a
+   * legacy package); the channel id is part of the SIGNED manifest, so a
+   * mixed-up or swapped URL cannot feed a customer another customer's
+   * firmware. Older unsigned-era lists carry no channel field - those are
+   * accepted only on the shared "default" channel. */
   _requireOwnChannel(manifest, url) {
-    const mine = (APP_CONFIG.channel || "default");
+    const mine = this.activeChannel();
     const theirs = (manifest.channel || "default");
     if (mine === theirs) return;
     Util.err(I18N.t("err.channel", { mine: mine, theirs: theirs }) + " (" + url + ")");

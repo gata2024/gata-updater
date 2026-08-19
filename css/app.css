@@ -302,6 +302,10 @@ details.picky[open] > summary { margin-bottom: 8px; }
 
 /* Board revision selector (rev 5 / rev 6). */
 .boardrow { align-items: center; margin-bottom: 10px; }
+#licenseCard textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace;
+  font-size: 12px; border-radius: 8px; border: 1px solid var(--line, #2a3550);
+  background: transparent; color: inherit; padding: 8px; margin: 8px 0; resize: vertical; }
+#licError { color: #e66; }
 .firstinstall { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px;
   padding: 10px 12px; border: 1px solid var(--line, #2a3550); border-radius: 10px; cursor: pointer; }
 .firstinstall input { margin-top: 3px; flex: none; }

@@ -119,6 +119,50 @@ const T = {
         /BOARD:\(rev\\d\+\)/.test(gsrc) && /this\.boardRev/.test(gsrc));
     }
 
+    /* ------------------------------------------------- licenses */
+    {
+      const b64u = b => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const pair = await crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+      const pubJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+      const mk = async (payload) => {
+        const bytes = new TextEncoder().encode(JSON.stringify(payload));
+        const sig = new Uint8Array(await crypto.subtle.sign(
+          { name: "ECDSA", hash: "SHA-256" }, pair.privateKey, bytes));
+        return "GATA1." + b64u(bytes) + "." + b64u(sig);
+      };
+      const saved = APP_CONFIG.licensePublicKey;
+      APP_CONFIG.licensePublicKey = { kty: pubJwk.kty, crv: pubJwk.crv, x: pubJwk.x, y: pubJwk.y };
+      try {
+        const good = await mk({ customer: "KSP", channel: "ksp", issued: "2026-08-20", exp: null, id: "T-1" });
+        const p = await License.verify(good);
+        this.check("license: a signed token verifies and carries its channel",
+          p.customer === "KSP" && p.channel === "ksp");
+        let bad = null;
+        try { await License.verify(good.slice(0, -4) + "AAAA"); } catch (e) { bad = e; }
+        this.check("license: a tampered token is refused", !!bad);
+        let exp = null;
+        try { await License.verify(await mk({ customer: "X", channel: "x", exp: "2020-01-01", id: "T-2" })); }
+        catch (e) { exp = e; }
+        this.check("license: an expired token is refused", !!exp && /2020-01-01/.test(exp.message));
+        let junk = null;
+        try { await License.verify("not-a-license"); } catch (e) { junk = e; }
+        this.check("license: garbage input is refused politely", !!junk);
+      } finally {
+        APP_CONFIG.licensePublicKey = saved;
+      }
+      this.check("license: channel routing derives the customer's manifest URL",
+        Cloud.channelize("https://x/main/manifest.json", "ksp") === "https://x/main/customers/ksp/manifest.json" &&
+        Cloud.channelize("firmware/manifest.json", "danway") === "firmware/customers/danway/manifest.json" &&
+        Cloud.channelize("firmware/manifest.json", "default") === "firmware/manifest.json");
+      const asrc = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      this.check("license: updates and the firmware list are gated on a license",
+        /requireLicense\(\)/.test(asrc) && /License\.loadStored\(\)/.test(asrc) &&
+        /if \(!License\.licensed\(\)\)/.test(asrc));
+      const swsrc = await (await fetch("../sw.js", { cache: "no-store" })).text();
+      this.check("license: license.js is part of the offline app shell", /js\/license\.js/.test(swsrc));
+    }
+
     /* ------------------------------------------------- manifest signing */
     {
       const pair = await crypto.subtle.generateKey(

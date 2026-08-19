@@ -140,22 +140,40 @@ reinstall.
 
 ---
 
-## 4. Adding a new customer
+## 4. Adding a new customer — LICENSES (current way, from v2.7.0)
+
+There is ONE app for everybody now (one link, one APK, one .exe). What a
+customer receives is a **license key** — a signed token that tells the app
+which firmware channel to serve. The app refuses to do anything until a
+license is entered (once; it stays on the device).
 
 ```powershell
+# 1. create their firmware channel (once) - seeds it from General:
 .\new_customer.ps1 -Id acme-water -Name "ACME Water Systems"
+cd ..\firmware; git push   # or let the next publish push it
+
+# 2. issue their license (perpetual; add -Expires 2027-12-31 if wanted):
+cd ..\tools
+.\make_license.ps1 -Customer "ACME Water Systems" -Channel acme-water
 ```
 
-That one command creates their signed firmware channel, their app copy under
-`c\acme-water\`, and a hand-off ZIP in `dist\`. Then:
+Send the printed `GATA1.…` token to the customer — they paste it into the
+License box on first start. Every issued license is recorded in
+`tools\licenses_issued.txt`. Publishing their firmware stays the same:
+`publish_firmware.ps1 -Customer acme-water …`.
 
-```powershell
-.\build_android_app.ps1 -Id acme-water -Name "ACME Water Systems"   # their APK (optional)
-cd ..
-git add -A; git commit -m "customer: ACME Water"; git push github main
-```
+**Secrets:** `tools\license_key.json` mints licenses — back it up together
+with `tools\signing_key.json` and never commit either.
 
-Their app link is `https://gata2024.github.io/gata-updater/c/acme-water/`.
+To take a customer's access away: stop publishing to their channel (their app
+keeps whatever it already cached), or issue licenses with `-Expires` from the
+start for time-limited access.
+
+### Legacy per-customer app copies (before v2.7.0)
+
+The old `c\<id>\` app copies and per-customer APKs keep working — a pinned
+channel in their config acts as their license (grandfathered). New customers
+should get the universal app + a license instead.
 
 ---
 

@@ -38,6 +38,26 @@
   <div id="platformBanner" class="banner hidden" role="note"></div>
   <div id="demoBanner" class="banner demo hidden" data-i18n="banner.demo">DEMO MODE — no real device is used. Turn it off under Settings.</div>
 
+  <!-- LICENSE : one app for everyone, the license picks the firmware channel -->
+  <section id="licenseCard" class="card hidden">
+    <div class="cardhead">
+      <span class="stepnum">🔑</span>
+      <h2 data-i18n="lic.title">License</h2>
+    </div>
+    <div id="licEnter">
+      <p class="muted" data-i18n="lic.enterHint">Enter the license you received with the controller. It decides which software this updater installs. One time only — it stays on this device.</p>
+      <textarea id="licInput" rows="3" spellcheck="false" placeholder="GATA1.…"></textarea>
+      <div class="row gap">
+        <button id="btnLicActivate" class="btn prime" data-i18n="lic.activate">Activate</button>
+      </div>
+      <p id="licError" class="err small hidden"></p>
+    </div>
+    <div id="licShow" class="hidden">
+      <p><span data-i18n="lic.licensedTo">Licensed to</span> <b id="licWho"></b> <span id="licExp" class="muted small"></span></p>
+      <button id="btnLicChange" class="btn small" data-i18n="lic.change">Change license</button>
+    </div>
+  </section>
+
   <!-- STEP 1 : firmware source -->
   <section class="card">
     <div class="cardhead">
@@ -217,6 +237,7 @@
 <script src="js/config.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/util.js"></script>
+<script src="js/license.js"></script>
 <script src="js/validate.js"></script>
 <script src="js/dfuse.js"></script>
 <script src="js/transport.js"></script>

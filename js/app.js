@@ -50,7 +50,53 @@ const App = {
         });
       }).catch(() => {});
     }
-    await this.loadManifest();
+
+    /* License first: it decides the firmware channel, so the manifest can
+     * only be loaded after it. Without one, the app shows the license card
+     * and waits - nothing else works until a valid license is entered. */
+    await License.loadStored();
+    this.renderLicense();
+    if (License.licensed()) {
+      await this.loadManifest();
+    }
+  },
+
+  /* --------------------------------------------------------------- license */
+  renderLicense() {
+    const card = this.$("licenseCard");
+    const lic = License.info();
+    if (lic && lic.legacy) { card.classList.add("hidden"); return; }  // old per-customer package
+    card.classList.remove("hidden");
+    this.$("licEnter").classList.toggle("hidden", !!lic);
+    this.$("licShow").classList.toggle("hidden", !lic);
+    if (lic) {
+      this.$("licWho").textContent = lic.customer + " (" + lic.channel + ")";
+      this.$("licExp").textContent = lic.exp ? I18N.t("lic.until", { d: lic.exp }) : "";
+    }
+  },
+
+  async onLicActivate() {
+    const err = this.$("licError");
+    err.classList.add("hidden");
+    try {
+      await License.activate(this.$("licInput").value);
+      this.$("licInput").value = "";
+      this.renderLicense();
+      localStorage.removeItem("gata.lastManifestDate");   // channels have their own timeline
+      await this.loadManifest();
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove("hidden");
+    }
+  },
+
+  /* Every action that would touch a controller or download firmware runs
+   * through this gate. */
+  requireLicense() {
+    if (License.licensed()) return true;
+    Util.err(I18N.t("lic.needed"));
+    this.$("licenseCard").scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
   },
 
   demo() { return localStorage.getItem("gata.demo") === "1"; },
@@ -106,6 +152,14 @@ const App = {
   /* ------------------------------------------------------------ manifest */
   async loadManifest() {
     const list = this.$("versionList");
+    if (!License.licensed()) {
+      list.innerHTML = "";
+      const div = document.createElement("div");
+      div.className = "muted";
+      div.textContent = I18N.t("lic.needed");
+      list.appendChild(div);
+      return;
+    }
     list.innerHTML = "";
     const loading = document.createElement("div");
     loading.className = "muted";
@@ -541,6 +595,7 @@ const App = {
   /* ------------------------------------------------------------ main flow */
   async onUpdate(mode) {
     if (this.busy) return;
+    if (!this.requireLicense()) return;
     this.setBusy(true);
     this.resetSteps(mode);
     try {
@@ -657,6 +712,14 @@ const App = {
       this.$("localPane").classList.add("hidden");
       this.$("cloudPane").classList.remove("hidden");
       this.$("srcBadge").textContent = I18N.t("badge.cloud");
+    };
+
+    this.$("btnLicActivate").onclick = () => this.onLicActivate();
+    this.$("btnLicChange").onclick = () => {
+      License.clear();
+      this.manifest = null;
+      this.renderVersions();
+      this.renderLicense();
     };
 
     this.$("selLang").onchange = e => this.changeLanguage(e.target.value);
