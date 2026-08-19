@@ -555,7 +555,10 @@ const Flows = {
        * interrupt storm kills the stream ~13 s later at the same byte - a
        * reset fully defuses it (nothing re-arms the UART on the next boot). */
       if (mode === "both" && !espPossible) {
-        step("esp", "done", I18N.t("d.espRev6"), 1);
+        /* warn, not done - a green check here read as "cloud module updated"
+         * when it was actually skipped (needs the one-time BOOT-mode install
+         * of system firmware 1.0.9). */
+        step("esp", "warn", I18N.t("d.espRev6") + " " + I18N.t("hint.espRev6"), 1);
       } else if (mode === "both") {
         step("esp", "active", I18N.t("d.espCheck"), null);
         const hasEsp = await bl.espDetect(true);
