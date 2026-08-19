@@ -110,9 +110,13 @@ const T = {
       this.check("board: rev6 list = rev6 + unified only (old binaries never offered)",
         names(Cloud.forBoard(vs, "rev6")) === "six,uni");
       const src = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
-      this.check("board: the ESP phase is gated off for rev 6",
-        /espPossible = ctx\.board !== "rev6"/.test(src) &&
+      this.check("board: the rev 6 ESP gate keys off the INSTALLED firmware (BL >= 1.0.9 lifts it)",
+        /espPossible = \(bl\.blVersion \|\| 0\) >= 0x00010009/.test(src) &&
+        /\(bl\.boardRev \|\| ctx\.board\) !== "rev6"/.test(src) &&
         /d\.espRev6/.test(src) && /err\.espRev6/.test(src));
+      const gsrc = await (await fetch("../js/gata.js", { cache: "no-store" })).text();
+      this.check("board: the handshake parses the BOARD:revN line from INFO",
+        /BOARD:\(rev\\d\+\)/.test(gsrc) && /this\.boardRev/.test(gsrc));
     }
 
     /* ------------------------------------------------- manifest signing */

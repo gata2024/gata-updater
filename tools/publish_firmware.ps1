@@ -163,13 +163,17 @@ if (-not $NoEsp) {
     if ($espSrc) {
         $needed = @{ bootloader = "bootloader.bin"; partitions = "partitions.bin";
                      boot_app0 = "boot_app0.bin"; firmware = "firmware.bin" }
+        # Per-release folder: every manifest entry pins its files by sha256, so
+        # the shared esp\*.bin names must never be overwritten - doing so would
+        # break the hash of every OLDER version still in the list.
+        $espRel = "esp/" + ($Version -replace '[^0-9A-Za-z]', '_') + "/"
         $espEntry = [ordered]@{}
         foreach ($key in @("bootloader", "partitions", "boot_app0", "firmware")) {
             $src = Join-Path $espSrc $needed[$key]
             if (-not (Test-Path $src)) { throw "ESP32 file missing: $src (use -NoEsp for a release without ESP32)" }
             if ($key -eq "partitions") { Test-Image $src "parts" }
             elseif ($key -ne "boot_app0") { Test-Image $src "esp" }
-            $espEntry[$key] = New-FileEntry $src ("esp/" + $needed[$key])
+            $espEntry[$key] = New-FileEntry $src ($espRel + $needed[$key])
         }
         Write-Host "  esp32      : 4 files"
     } else {

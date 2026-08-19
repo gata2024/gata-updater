@@ -483,12 +483,18 @@ const Flows = {
        * update mode (enterBootloader); BOOT-button DFU is the fallback. */
       let bl = await this._establishUpdateMode(ctx, step);
 
-      /* Rev 6 boards: the ESP32 moved to another UART (USART3/PD8-PD9) that
-       * the installed system firmware never initialises - its frames exit on
-       * pins now wired to the microSD pad. Harmless but dead, so say so
-       * instead of timing out. Lift this gate when the system firmware gains
-       * the rev 6 ESP path. */
-      const espPossible = ctx.board !== "rev6";
+      /* Rev 6 boards: the ESP32 moved to another UART (USART3/PD8-PD9).
+       * System firmware 1.0.9+ probes the board itself and drives the right
+       * pins on both revisions - so the gate is decided by what is actually
+       * INSTALLED on the board, not by the board alone. Older firmware on a
+       * rev 6 board would talk to the microSD pads: harmless but dead, so
+       * say so instead of timing out. */
+      if (bl.boardRev && bl.boardRev !== ctx.board) {
+        Util.warn("The controller reports a " + bl.boardRev + " board but '" +
+                  ctx.board + "' is selected - trusting the controller.");
+      }
+      const espPossible = (bl.blVersion || 0) >= 0x00010009 ||
+                          (bl.boardRev || ctx.board) !== "rev6";
 
       /* =================================================== mode: cloud ==== */
       if (mode === "cloud") {
@@ -738,6 +744,11 @@ const Flows = {
       }
       await this._acquireWakeLock();
       const bl = await this._connectBootloader(ctx, { tries: 3 });
+      /* Same rev 6 rule as the main flows: only system firmware 1.0.9+
+       * reaches the ESP32 on a rev 6 board (USART3/PD8-PD9). */
+      if ((bl.blVersion || 0) < 0x00010009 && (bl.boardRev || ctx.board) === "rev6") {
+        throw new UploaderError(I18N.t("err.espRev6"), I18N.t("hint.espRev6"));
+      }
       const hasEsp = await bl.espDetect(true);
       if (!hasEsp) throw new UploaderError(I18N.t("err.noEsp"), I18N.t("hint.noEsp"));
       let image, addr;

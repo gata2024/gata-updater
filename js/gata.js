@@ -101,8 +101,14 @@ class GataBootloader {
      * nothing and keep the old handling. */
     const m = /BL:(\d+)\.(\d+)\.(\d+)/.exec(r.text);
     this.blVersion = m ? (Number(m[1]) * 65536 + Number(m[2]) * 256 + Number(m[3])) : 0;
+    /* From 1.0.9 the update firmware also probes the main-board revision
+     * (PB12/PB13 short test) and reports it - "rev5" or "rev6". Older
+     * firmware says nothing -> null, the user's board choice stands. */
+    const b = /BOARD:(rev\d+)/.exec(r.text);
+    this.boardRev = b ? b[1] : null;
     Util.ok("GATA controller answered - ready for the update." +
-            (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] + ")" : ""));
+            (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] +
+                 (b ? ", " + b[1] + " board" : "") + ")" : ""));
     return r.text;
   }
 
