@@ -104,7 +104,14 @@ if (-not $Version) {
     }
     $label = ($label -replace '[^0-9A-Za-z]', '')
     $Version = (Get-Date -Format "dd_MM_yy") + "_" + $label
-    if ($Board -eq "rev6") { $Version += "_rev6" }
+    # The board revision is always part of the name, so every .bin (and the
+    # esp\<version>\ folder) says which board it is for at a glance.
+    if ($Board -ne "all") { $Version += "_" + $Board }
+}
+# Explicit -Version: still make sure the rev is visible in the name/files.
+elseif ($Board -ne "all" -and $Version -notmatch "(?i)rev\d") {
+    Write-Host "NOTE: appending _$Board to the version name so the files carry the board revision." -ForegroundColor Yellow
+    $Version += "_" + $Board
 }
 
 # ---------------------------------------------------------------- validate
