@@ -61,10 +61,13 @@ class ReleaseManager : Form
          *     GATA_Release_Manager.exe /buildfolder <channel> <parent folder>  */
         if (args.Length >= 3 && args[0].Equals("/buildfolder", StringComparison.OrdinalIgnoreCase))
         {
+            string board = args.Length >= 4 ? args[3] : "rev5";
             var f = new ReleaseManager();
-            f.BuildFolderCore(args[1], Path.Combine(args[2],
-                "Uploader_" + (args[1] == "default" ? "General" : Pretty(args[1])).Replace(" ", "_")),
-                s => Console.WriteLine(s));
+            string who = args[1] == "default" ? "General" : Pretty(args[1]);
+            var probs = f.BuildFolderCore(args[1],
+                Path.Combine(args[2], "Uploader_" + who.Replace(" ", "_") + "_" + board),
+                board, s => Console.WriteLine(s));
+            foreach (string p in probs) Console.WriteLine("PROBLEM: " + p);
             return;
         }
 
@@ -363,15 +366,27 @@ class ReleaseManager : Form
             return;
         }
 
-        string dest;
+        /* One folder per board: a rev 5 folder must carry rev 5 firmware and a
+         * rev 6 folder rev 6 firmware, so the board tick boxes decide what is
+         * built - ticking both makes both folders. */
+        var boards = new List<string>();
+        if (chkRev5.Checked) boards.Add("rev5");
+        if (chkRev6.Checked) boards.Add("rev6");
+        if (boards.Count == 0)
+        {
+            MessageBox.Show("Tick which board this uploader is for (rev 5, rev 6, or both).", "Pick a board");
+            return;
+        }
+
+        string parent;
         using (var d = new FolderBrowserDialog
         {
-            Description = "Where should the " + who + " uploader folder be created?",
+            Description = "Where should the " + who + " uploader folder" + (boards.Count > 1 ? "s" : "") + " be created?",
             SelectedPath = @"D:\"
         })
         {
             if (d.ShowDialog() != DialogResult.OK) return;
-            dest = Path.Combine(d.SelectedPath, "Uploader_" + who.Replace(" ", "_"));
+            parent = d.SelectedPath;
         }
 
         Busy(true);
@@ -379,21 +394,29 @@ class ReleaseManager : Form
         {
             try
             {
-                Status("Building...");
-                var problems = BuildFolderCore(channel, dest, Log);
-                if (problems.Count > 0)
+                var made = new List<string>();
+                var allProblems = new List<string>();
+                foreach (string board in boards)
                 {
-                    Status("Folder built BUT the check found problems - see the log.");
-                    MessageBox.Show("The folder was built but the check found problems:\n\n" +
-                                    string.Join("\n", problems.ToArray()) +
-                                    "\n\nDo not send it until this is fixed.",
-                                    "Check failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    string dest = Path.Combine(parent, "Uploader_" + who.Replace(" ", "_") + "_" + board);
+                    Status("Building " + board + "...");
+                    var problems = BuildFolderCore(channel, dest, board, Log);
+                    if (problems.Count > 0) allProblems.AddRange(problems);
+                    else made.Add(dest);
                 }
-                Status("Done - folder ready to send.");
-                if (MessageBox.Show("Folder ready:\n\n" + dest + "\n\nOpen it now?", "Done",
+                if (allProblems.Count > 0)
+                {
+                    Status("Problems found - see the log.");
+                    MessageBox.Show("Not everything is ready to send:\n\n" +
+                                    string.Join("\n\n", allProblems.ToArray()),
+                                    "Check failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (made.Count == 0) return;
+                }
+                Status("Done - " + made.Count + " folder(s) ready to send.");
+                if (made.Count > 0 &&
+                    MessageBox.Show("Ready:\n\n" + string.Join("\n", made.ToArray()) + "\n\nOpen now?", "Done",
                                     MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
-                    Process.Start("explorer.exe", "\"" + dest + "\"");
+                    Process.Start("explorer.exe", "\"" + made[0] + "\"");
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
             finally { Busy(false); }
@@ -403,13 +426,13 @@ class ReleaseManager : Form
     /* The actual folder build - shared by the button and by /buildfolder, so
      * what is tested from the command line is exactly what the button does.
      * Returns the list of problems found (empty = good to send). */
-    public List<string> BuildFolderCore(string channel, string dest, Action<string> log)
+    public List<string> BuildFolderCore(string channel, string dest, string board, Action<string> log)
     {
         string who = channel == "default" ? "General" : Pretty(channel);
         string licFile = FindLicenseFile(channel);
         var problems = new List<string>();
 
-        log("=== Building " + dest + " ===");
+        log("=== Building " + dest + "   (" + board + ") ===");
         if (licFile == null) { problems.Add("MISSING: no license file for channel '" + channel + "'"); return problems; }
 
         /* Rebuilding on top of an older folder would leave its stale files
@@ -460,8 +483,31 @@ class ReleaseManager : Form
         File.Copy(licFile, Path.Combine(dest, "gata.license"), true);
         log("   license: " + Path.GetFileName(licFile) + "  ->  gata.license");
 
-        int n = CopyLatestFirmware(channel, dest, log);
+        int n = CopyLatestFirmware(channel, dest, board, log);
         log("   offline firmware files copied: " + n);
+
+        /* A channel that never received the newest release would silently ship
+         * months-old firmware. Say so plainly instead. */
+        string manPath = channel == "default"
+            ? Path.Combine(FirmwareDir, "manifest.json")
+            : Path.Combine(FirmwareDir, "customers", channel, "manifest.json");
+        if (n == 0)
+            problems.Add("NO FIRMWARE for " + board + " on the '" + channel + "' channel - publish for " +
+                         who + " first (tick " + board + " and press PUBLISH TO CLOUD), then build this folder again.");
+        else if (channel != "default" && File.Exists(manPath))
+        {
+            /* Compare RELEASE DATES, not names: per-channel names always differ
+             * (they carry the company), so comparing names warned even when the
+             * channel was ahead. Dates are ISO, so a plain string compare works.
+             * Only a channel that is genuinely BEHIND General is worth a word. */
+            string mineDate = NewestVersionDate(File.ReadAllText(manPath));
+            string genPath = Path.Combine(FirmwareDir, "manifest.json");
+            string genDate = File.Exists(genPath) ? NewestVersionDate(File.ReadAllText(genPath)) : null;
+            if (mineDate != null && genDate != null &&
+                string.Compare(mineDate, genDate, StringComparison.Ordinal) < 0)
+                log("   NOTE: " + who + "'s newest release is from " + mineDate + ", General is on " + genDate +
+                    ". Publish for " + who + " if they should get the newer software.");
+        }
 
         /* Prove the folder works before it is handed over: every script the
          * launcher calls must be present, the license must be there, and none
@@ -481,10 +527,7 @@ class ReleaseManager : Form
 
         log("   check passed: launcher scripts present, no keys included.");
         log("=== DONE ===");
-        log("Send the whole folder to " + who + ". They run CLICK_ME_START_ON_PC.bat.");
-        if (n == 0)
-            log("NOTE: no published firmware found for this channel - the folder has no offline .bin files yet " +
-                "(the customer will still get cloud updates). Publish first, then build the folder again.");
+        log("Send the whole folder to " + who + " (for " + board + " boards). They run CLICK_ME_START_ON_PC.bat.");
         return problems;
     }
 
@@ -516,21 +559,34 @@ class ReleaseManager : Form
         return Convert.FromBase64String(s);
     }
 
-    /* Copy the newest published controller/system/esp files of a channel into
-     * the customer folder's offline directories. Reads the channel manifest so
-     * exactly the files of the LATEST version are taken. */
-    int CopyLatestFirmware(string channel, string dest, Action<string> log)
+    /* Copy the newest published firmware FOR THE CHOSEN BOARD of a channel
+     * into the customer folder's offline directories.
+     *
+     * The board matters: a release published before rev 6 existed carries no
+     * board field and runs ONLY on rev 5, so handing it to a rev 6 customer
+     * would be wrong. Same rule the app itself uses: take a version when its
+     * board is "all" (unified binary) or equals the wanted one; a missing
+     * board field means rev 5. */
+    int CopyLatestFirmware(string channel, string dest, string board, Action<string> log)
     {
         string manPath = channel == "default"
             ? Path.Combine(FirmwareDir, "manifest.json")
             : Path.Combine(FirmwareDir, "customers", channel, "manifest.json");
-        if (!File.Exists(manPath)) return 0;
+        if (!File.Exists(manPath)) { log("   ! no manifest for this channel yet"); return 0; }
 
         string json = File.ReadAllText(manPath);
+        string first = VersionBlockForBoard(json, board);
+        if (first == null)
+        {
+            log("   !! this channel has NO firmware published for " + board + ".");
+            return 0;
+        }
+        string usedVer = ValueOf(first, "version"), usedDate = ValueOf(first, "date");
+        log("   using published version: " + usedVer + "   (" + usedDate + ", " + board + ")");
+
         // The urls we need are plain strings - pull them out without a JSON lib.
         var urls = new List<string>();
         int idx = 0;
-        string first = FirstVersionBlock(json);
         while (true)
         {
             int u = first.IndexOf("\"url\"", idx);
@@ -567,19 +623,65 @@ class ReleaseManager : Form
         return n;
     }
 
-    static string FirstVersionBlock(string json)
+    /* Walk the version list (newest first) and return the first block that
+     * fits the wanted board, or null when the channel has none. */
+    static string VersionBlockForBoard(string json, string board)
     {
         int v = json.IndexOf("\"versions\"");
-        if (v < 0) return json;
-        int start = json.IndexOf('{', v);
-        if (start < 0) return json;
-        int depth = 0;
-        for (int i = start; i < json.Length; i++)
+        if (v < 0) return null;
+        int i = json.IndexOf('[', v);
+        if (i < 0) return null;
+
+        while (true)
         {
-            if (json[i] == '{') depth++;
-            else if (json[i] == '}') { depth--; if (depth == 0) return json.Substring(start, i - start + 1); }
+            int start = json.IndexOf('{', i);
+            if (start < 0) return null;
+            int depth = 0, end = -1;
+            for (int k = start; k < json.Length; k++)
+            {
+                if (json[k] == '{') depth++;
+                else if (json[k] == '}') { depth--; if (depth == 0) { end = k; break; } }
+            }
+            if (end < 0) return null;
+            string block = json.Substring(start, end - start + 1);
+
+            string b = ValueOf(block, "board");
+            if (string.IsNullOrEmpty(b)) b = "rev5";      // published before rev 6 existed
+            if (b == "all" || b == board) return block;
+
+            i = end + 1;
+            if (json.IndexOf('{', i) < 0) return null;
         }
-        return json.Substring(start);
+    }
+
+    static string ValueOf(string block, string key)
+    {
+        int k = block.IndexOf("\"" + key + "\"");
+        if (k < 0) return null;
+        int c = block.IndexOf(':', k);
+        if (c < 0) return null;
+        int q1 = block.IndexOf('"', c + 1);
+        if (q1 < 0) return null;
+        int q2 = block.IndexOf('"', q1 + 1);
+        if (q2 < 0) return null;
+        return block.Substring(q1 + 1, q2 - q1 - 1);
+    }
+
+    /* Release date of a channel's newest entry - used to point out a channel
+     * that is behind (e.g. Danway still on an older build). */
+    static string NewestVersionDate(string json)
+    {
+        int v = json.IndexOf("\"versions\"");
+        if (v < 0) return null;
+        int start = json.IndexOf('{', v);
+        if (start < 0) return null;
+        int depth = 0;
+        for (int k = start; k < json.Length; k++)
+        {
+            if (json[k] == '{') depth++;
+            else if (json[k] == '}') { depth--; if (depth == 0) return ValueOf(json.Substring(start, k - start + 1), "date"); }
+        }
+        return null;
     }
 
     /* The only tools\ scripts a customer's launcher calls. Everything else in
