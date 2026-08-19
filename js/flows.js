@@ -483,8 +483,18 @@ const Flows = {
        * update mode (enterBootloader); BOOT-button DFU is the fallback. */
       let bl = await this._establishUpdateMode(ctx, step);
 
+      /* Rev 6 boards: the ESP32 moved to another UART (USART3/PD8-PD9) that
+       * the installed system firmware never initialises - its frames exit on
+       * pins now wired to the microSD pad. Harmless but dead, so say so
+       * instead of timing out. Lift this gate when the system firmware gains
+       * the rev 6 ESP path. */
+      const espPossible = ctx.board !== "rev6";
+
       /* =================================================== mode: cloud ==== */
       if (mode === "cloud") {
+        if (!espPossible) {
+          throw new UploaderError(I18N.t("err.espRev6"), I18N.t("hint.espRev6"));
+        }
         // No FORMAT: the controller application stays untouched. Move quickly -
         // the 15 s window keeps ticking until ESP_WRITE reaches the device
         // (from then on the firmware blocks its own auto-exit).
@@ -538,7 +548,9 @@ const Flows = {
        * a board without an ESP leaves the probe UART armed and a delayed
        * interrupt storm kills the stream ~13 s later at the same byte - a
        * reset fully defuses it (nothing re-arms the UART on the next boot). */
-      if (mode === "both") {
+      if (mode === "both" && !espPossible) {
+        step("esp", "done", I18N.t("d.espRev6"), 1);
+      } else if (mode === "both") {
         step("esp", "active", I18N.t("d.espCheck"), null);
         const hasEsp = await bl.espDetect(true);
         this._ck();

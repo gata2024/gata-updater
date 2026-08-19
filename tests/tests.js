@@ -96,6 +96,25 @@ const T = {
     } catch (e) { threw = true; }
     this.check("manifest: releases published under the old names still load", !threw);
 
+    /* ------------------------------------------------- board filtering */
+    {
+      const vs = [
+        { version: "old" },                          // legacy: no board field
+        { version: "five", board: "rev5" },
+        { version: "six", board: "rev6" },
+        { version: "uni", board: "all" },
+      ];
+      const names = (list) => list.map(v => v.version).join(",");
+      this.check("board: rev5 list = legacy + rev5 + unified",
+        names(Cloud.forBoard(vs, "rev5")) === "old,five,uni");
+      this.check("board: rev6 list = rev6 + unified only (old binaries never offered)",
+        names(Cloud.forBoard(vs, "rev6")) === "six,uni");
+      const src = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      this.check("board: the ESP phase is gated off for rev 6",
+        /espPossible = ctx\.board !== "rev6"/.test(src) &&
+        /d\.espRev6/.test(src) && /err\.espRev6/.test(src));
+    }
+
     /* ------------------------------------------------- manifest signing */
     {
       const pair = await crypto.subtle.generateKey(

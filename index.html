@@ -46,6 +46,14 @@
       <span id="srcBadge" class="badge" data-i18n="badge.cloud">cloud</span>
     </div>
     <div id="cloudPane">
+      <div class="row gap boardrow">
+        <span class="muted small" data-i18n="board.which">Which board is being updated?</span>
+        <div class="seg" role="radiogroup">
+          <button id="btnBoard5" class="segbtn" data-i18n="board.rev5">Board rev 5</button>
+          <button id="btnBoard6" class="segbtn" data-i18n="board.rev6">Board rev 6</button>
+        </div>
+      </div>
+      <p id="boardNote6" class="muted small hidden" data-i18n="board.note6">Rev 6 has a USB-C connector — if the controller does not appear, use a USB-A to USB-C cable (some C-to-C cables refuse this board).</p>
       <div id="versionList" class="versions"><div class="muted" data-i18n="d.loading">Loading firmware list…</div></div>
       <div class="row gap wrap">
         <button id="btnRefresh" class="btn ghost" data-i18n="btn.refresh">Refresh list</button>

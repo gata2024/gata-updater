@@ -14,6 +14,7 @@ const App = {
     I18N.init();
     I18N.applyStatic();
     this.wireEvents();
+    this.renderBoardButtons();
     this.renderCaps();
     this.renderHistory();
     this.applySettingsToUi();
@@ -128,11 +129,34 @@ const App = {
     }
   },
 
+  /* Which board revision the user is updating (persisted per device). */
+  board() { return localStorage.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
+  setBoard(b) {
+    localStorage.setItem("gata.board", b);
+    this.selectedVersion = null;               // the old pick may not exist for this board
+    this.renderBoardButtons();
+    this.renderVersions();
+  },
+  renderBoardButtons() {
+    const b = this.board();
+    this.$("btnBoard5").classList.toggle("on", b === "rev5");
+    this.$("btnBoard6").classList.toggle("on", b === "rev6");
+    this.$("boardNote6").classList.toggle("hidden", b !== "rev6");
+  },
+
   renderVersions() {
     const list = this.$("versionList");
     list.innerHTML = "";
     if (!this.manifest) return;
-    this.manifest.versions.forEach((v, idx) => {
+    const shown = Cloud.forBoard(this.manifest.versions, this.board());
+    if (!shown.length) {
+      const div = document.createElement("div");
+      div.className = "muted";
+      div.textContent = I18N.t("board.none");
+      list.appendChild(div);
+      return;
+    }
+    shown.forEach((v, idx) => {
       const row = document.createElement("label");
       row.className = "verrow";
       const radio = document.createElement("input");
@@ -528,6 +552,7 @@ const App = {
       const { pkg, version } = await this.getPackage(mode);
       await Flows.runFullUpdate({
         mode, pkg, version, preConnected,
+        board: this.board(),
         demo: this.demo(),
         demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,
@@ -606,6 +631,8 @@ const App = {
   wireEvents() {
     /* The one button everybody uses: newest software, everything the board
      * has. "both" already skips the ESP32 by itself when none is fitted. */
+    this.$("btnBoard5").onclick = () => this.setBoard("rev5");
+    this.$("btnBoard6").onclick = () => this.setBoard("rev6");
     this.$("btnUpdateNow").onclick = () => this.onUpdate("both");
     this.$("btnUpdCtrl").onclick = () => this.onUpdate("controller");
     this.$("btnUpdCloud").onclick = () => this.onUpdate("cloud");

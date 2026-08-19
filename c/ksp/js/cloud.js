@@ -298,6 +298,18 @@ const Cloud = {
     return bytes;
   },
 
+  /* Which board a published version is for. Everything released before rev 6
+   * existed carries no board field and is rev5-ONLY (older binaries do not
+   * know the rev 6 pin map); "all" marks a unified binary that detects the
+   * board itself at boot. */
+  boardOf(v) { return v.board || "rev5"; },
+  forBoard(versions, board) {
+    return (versions || []).filter(v => {
+      const b = this.boardOf(v);
+      return b === "all" || b === (board || "rev5");
+    });
+  },
+
   /* The two controller files a version can carry. Releases published before
    * the naming was cleaned up call them "main" and "bootloaders.b1/.b3" (two
    * builds of the same system firmware that only differed by a version number,

@@ -1,0 +1,115 @@
+{
+  "document": "changes_from_rev5_to_rev6",
+  "written": "2026-08-19",
+  "audience": "The Claude/developer maintaining the GATA Cloud Uploader (web USB burner that flashes the STM32 app to external flash, and the ESP32 through the STM32, via the resident USB bootloader). Everything here is the delta between main-board rev5 (current, working) and rev6 (new board), plus the firmware changes already pushed to support rev6.",
+  "tldr": {
+    "stm32_app_flashing": "UNCHANGED and verified safe on rev6. INFO/FORMAT/WRITE, the QSPI target, the 0x90000000 mapping and the BKP30 handshake are all identical. The uploader can flash the STM32 app on rev6 today with zero changes.",
+    "esp32_flashing": "BROKEN on rev6 until the bootloader is updated. The bootloader bit-bangs the esptool protocol out USART1 (PB14/PB15); on rev6 those pins go to the microSD DAT0 pad and Din2, and the ESP32 now sits on USART3 (PD8/PD9), which the bootloader never initializes. Frames go nowhere. Not dangerous, just dead.",
+    "device_identification": "The APPLICATION's USB descriptor strings changed (GATA / GATA Controller). VID/PID unchanged. If the uploader matches on product/manufacturer strings it must be updated; if it matches on VID/PID only, no change.",
+    "board_revision_awareness": "One unified app binary now auto-detects rev5 vs rev6 at boot. There is currently NO protocol command for the uploader to query the board revision - see open_gaps."
+  },
+
+  "hardware_changes_relevant_to_the_uploader": {
+    "usb_connector": {
+      "rev5": "micro-B (UJ2-MIBH2-4-SMT)",
+      "rev6": "USB-C (TYPE-C-31-M-12), both data pairs bonded, same USB 2.0 FS signals on PA11/PA12, VBUS sense PA9 unchanged",
+      "uploader_impact": "None at protocol level. CAUTION: rev6 ties CC1 and CC2 together through a single 5.1k (R76) instead of one Rd per pin. A spec-compliant USB-C source can read this as Debug Accessory Mode and refuse VBUS, so some C-to-C cables/hosts may not enumerate. Recommend documenting 'use a USB-A to USB-C cable' as the fallback in the uploader UI/help."
+    },
+    "esp32_serial_path": {
+      "rev5": "STM32 USART1, PB14=TX PB15=RX, 115200. This is what the bootloader's esp32_programmer.c uses (huart1 throughout).",
+      "rev6": "STM32 USART3, PD8=TX PD9=RX (1k series R40 in TX). USART1 no longer exists as a route to the ESP32.",
+      "uploader_impact": "ESP_* CDC commands reach the bootloader fine, but the SLIP frames exit on the wrong pins. ESP flashing via the bootloader is non-functional on rev6 until the bootloader is patched (see bootloader_status)."
+    },
+    "esp32_reset_boot_circuit": {
+      "rev5": "PE4->ESP32_DTR, PE5->ESP32_RTS through 10k into a CROSS-COUPLED BC846 pair (Q1/Q3): each transistor's emitter ties to the OTHER signal, so EN asserts only on DTR=1+RTS=0 and IO0 only on RTS=1+DTR=0 - mutually exclusive by construction. The bootloader's ESP32_EnterBootMode() holds DTR HIGH throughout, so IO0 was NEVER asserted; entering download mode always required the manual jumpers on the J12 header. Additionally the bootloader never configures PE4/PE5 as GPIO outputs at all (gpio.c comment: 'NOT CONFIGURED'), so its pin writes are electrical no-ops.",
+      "rev6": "PE4->EN and PE5->IO0 DIRECTLY through 470R. Schematic red note requires these pins be driven OPEN-DRAIN (the Q1/Q3 collectors still share the nets with the J12 header). EN has a 10k/10uF RC (tau = 100 ms), so releasing EN takes ~300-400 ms to cross threshold - sequence timing matters.",
+      "uploader_impact": "Once the bootloader is patched, rev6 needs NO jumpers: hold IO0 (PE5) low, pulse EN (PE4) low >=50 ms, release EN, keep IO0 low ~400 ms more, release IO0, then SYNC. A working reference implementation for BOTH revisions exists in the application at g_500/Core/Src/application/esp_prog.c (EspProg_EnterBootMode / EspProg_Sync)."
+    },
+    "external_flash_qspi": {
+      "change": "NONE. QUADSPI pins PB2 (CLK, AF9), PE7-PE10 (IO0-3, AF10), PC11 (NCS, AF9) and the U6 W25Q128JVSIQ app-storage flash are identical on both revisions. U4 W25Q256JVEIQ data flash on SPI3 also unchanged.",
+      "uploader_impact": "None. FORMAT/WRITE and the 0x90000000 memory-mapped application target work identically on rev6."
+    },
+    "pins_the_bootloader_drives_that_changed_meaning": {
+      "explanation": "The bootloader's update-mode MX_GPIO_Init is inherited from the gc_22 board and drives several pins push-pull LOW that were harmless on rev5 but got new roles on rev6.",
+      "PC2_PC3": "rev5: analog ADC-mux nets (harmless to drive). rev6: SPI2 MISO/MOSI of the new STM32<->ESP32 fast link. PC2 is the net the ESP32 drives as its SPI MISO output. Once the NEW ESP32 firmware (with spi_link) is flashed, every update-mode session puts two push-pull outputs on one net = sustained contention. NOT a today problem (current ESP firmware never drives IO19), but the bootloader must drop PC2/PC3 from its GPIO init before the new ESP firmware and update mode are combined in the field.",
+      "PE11": "rev5: unconnected. rev6: Din9 input net (opto + pull-up). Driven low during update mode = tolerable but sloppy; should also be dropped.",
+      "PB8_PB9": "I2C1 SCL/SDA on BOTH revs, held low during update mode - unchanged behaviour from rev5, expansion bus is stalled during update sessions. Informational only."
+    }
+  },
+
+  "firmware_state_already_pushed": {
+    "repo_main_board": "https://github.com/Hardware-Platformss/Main_board_firmware (g_500)",
+    "repo_esp": "https://github.com/Hardware-Platformss/ESP (esp)",
+    "commits": {
+      "bee5286": "Last rev5 baseline. ADDED the enterBootloader web-updater command and CHANGED THE APP'S USB CDC DESCRIPTOR STRINGS (see usb_identity).",
+      "db51428": "Runtime board-revision detection + full UART/pin re-map. One binary serves both boards.",
+      "4e24be6": "application/esp_prog.c - STM32-driven ESP32 reset + ROM download-mode entry + esptool SYNC probe, correct sequences for BOTH revisions. HMI/CDC command espCtl.",
+      "1427852": "SPI2 fast-link, STM32 master side (rev6 only, idle until the exchange task is wired).",
+      "esp_3ff769a": "SPI2 slave on the ESP32 (spi_link.cpp). NOT YET COMPILED - PlatformIO absent on the dev machine. The currently-deployed ESP firmware predates this and never drives IO19."
+    },
+    "board_revision_detection": {
+      "how": "The strap resistors are electrically unreadable (100k pull-up vs the H7's ~40k internal pull-down divides to ~0.94 V = always LOW). Instead the app exploits the one hard difference: rev6 SHORTS PB12 (HWid0) to PB13 (HWid1). It drives PB12 and checks PB13 follows against opposing internal pulls, both directions. Inconclusive => assumes rev5. Override: BOARD_REV_FORCE in boardSupport/board_rev.h.",
+      "uploader_relevance": "The unified app binary is what the uploader will be delivering: ONE .bin for both board revisions from commit db51428 onward. Older app bins (e.g. M_16_8_26.bin) are rev5-ONLY and must not be offered for rev6 boards."
+    }
+  },
+
+  "usb_identity": {
+    "vid_pid": "UNCHANGED: VID 0x0483 (1155), PID 0x5740 (22336) - both bootloader and application.",
+    "application_strings_changed_in_bee5286": {
+      "manufacturer": { "old": "STMicroelectronics", "new": "GATA" },
+      "product": { "old": "STM32 Virtual ComPort", "new": "GATA Controller" }
+    },
+    "action": "If the uploader identifies the APPLICATION port by product/manufacturer string, update the match (accept both old and new - fielded rev5 units still run old firmware). WebSerial/WebUSB filters based on VID/PID need no change. The BOOTLOADER's descriptor strings were not changed."
+  },
+
+  "protocol_reference": {
+    "unchanged": {
+      "bkp30_semantics": "RTC backup register DR30 is the boot decision register. stored_version == BOOTLOADER_VERSION + valid app => fast jump. The legacy B1/B3 version ping-pong trick still works.",
+      "update_request_magic": "0x55AA4711 written to DR30 = 'come up in update mode'. Verified identical in the app (uart1_task.c enterBootloader handler) and the bootloader (USBupdaterCode_relbuild/Core/Src/main.c:102).",
+      "cdc_commands": "INFO / FORMAT / WRITE / ESP_* command set unchanged.",
+      "app_target": "External QSPI flash memory-mapped at 0x90000000, validated by stack-pointer + reset-vector check before jump."
+    },
+    "new_in_the_application": {
+      "enterBootloader": {
+        "direction": "uploader -> app (HMI JSON framing, works over the app's USB CDC)",
+        "identifier": "enterBootloader",
+        "value": "8321",
+        "behaviour": "App acks with enterBootloaderAck=1, waits ~250 ms, writes 0x55AA4711 to BKP30, NVIC_SystemReset. Board comes back enumerated as the bootloader in update mode. Replaces any need for the BOOT-button ritual. Works on both revisions.",
+        "in_field_since": "commit bee5286 - NOT present in older fielded app binaries; uploader should fall back to the legacy entry method if no ack arrives."
+      },
+      "espCtl": {
+        "direction": "uploader/HMI -> app",
+        "identifier": "espCtl",
+        "values": { "test": "enter ESP download mode, esptool-SYNC probe, reset back to app; ack espCtlAck=1 on success", "boot": "park the ESP32 in ROM download mode", "reset": "plain ESP32 reset to application" },
+        "behaviour": "Uses the revision-correct sequence automatically (transistor handover on rev5, direct EN/IO0 on rev6).",
+        "note": "The HMI/CDC ack is best-effort because the ESP32 relays some transports; the authoritative log is SWV [ESPPROG]. Potential future uploader flow: espCtl=boot from the APP, then reboot to bootloader, then stream ESP payload - but the bootloader still needs the correct UART on rev6 for the payload leg."
+      }
+    }
+  },
+
+  "bootloader_status": {
+    "tree_flashed_to_boards": "D:/emirates/saudi/makeLogicwork/gc22SramToflash/USBupdaterCode_relbuild (NOTE: has diverged from USBupdaterCode - main.c/usart.c/others differ; confirm source of truth before editing)",
+    "works_on_rev6_today": ["fast boot + jump (touches only QSPI pins, unchanged)", "STM32 app update over USB CDC (INFO/FORMAT/WRITE)", "enterBootloader magic handshake"],
+    "broken_on_rev6_today": ["all ESP_* flashing commands - SLIP frames exit USART1/PB14 into the SD-card DAT0 pad; ESP32 is on USART3 PD8/PD9 which the bootloader never inits"],
+    "required_edits_for_rev6_esp_flashing": [
+      "1. Add USART3 (PD8/PD9, AF7, 115200) init and route esp32_programmer.c through a runtime-selected handle (copy the PB12/PB13 short-probe from g_500 boardSupport/board_rev.c to pick USART1-rev5 vs USART3-rev6).",
+      "2. Configure PE4/PE5 as OPEN-DRAIN outputs (schematic red note) and replace ESP32_EnterBootMode()'s sequence with the revision-correct one from g_500 Core/Src/application/esp_prog.c. The existing DTR-held-HIGH sequence has never worked on rev5 without jumpers and does not reset the ESP at all on rev6.",
+      "3. Remove PC2/PC3 (and PE11) from the gc_22 legacy MX_GPIO_Init output list - PC2/PC3 are the rev6 ESP SPI link and will see driver-vs-driver contention once the new ESP firmware ships.",
+      "4. Optional: extend INFO to report the board revision (see open_gaps)."
+    ],
+    "esp32_side_note": "The ESP32's own pins did NOT change between rev5 and rev6 (TXD0/RXD0, IO0, EN, IO18/19/5, IO21). The esptool ROM protocol, baud, and binary format are untouched. Only the STM32-side routing changed."
+  },
+
+  "open_gaps_for_the_uploader_dev": [
+    "No protocol command exposes the detected board revision yet. The app knows (g_boardRev, printed as [BOARDREV] on SWV) but neither the app protocol nor the bootloader INFO reports it. If the uploader wants to gate ESP-flash UI or pick per-rev assets, request a 'boardRev' identifier be added to the app (trivial) and/or an INFO field in the bootloader.",
+    "Until the bootloader is patched, the uploader should detect-or-assume rev6 and disable/warn on ESP flashing rather than let it time out silently.",
+    "The new unified app binary is the only bin that should be offered to rev6 boards; keep a manifest of which built binaries are rev5-only vs unified (unified = built from db51428 or later).",
+    "Android OTG note from rev5 testing still applies unchanged (CDC over OTG works; iOS remains impossible)."
+  ],
+
+  "safety_notes": [
+    "Flashing the current (unpatched) bootloader's ESP_* path on rev6 is harmless - frames go to an unconnected SD pad. Dead, not dangerous.",
+    "Both rev6 schematic red notes are satisfied today: PE3/F_LED is driven low before any RGB init on every path, and PE4/PE5 are either unconfigured (bootloader = high-Z, cannot fight the transistors) or open-drain (application, from db51428).",
+    "Do NOT combine the new ESP spi_link firmware with long bootloader update-mode sessions on rev6 until bootloader edit #3 lands (PC2 contention)."
+  ]
+}

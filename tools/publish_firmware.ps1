@@ -23,6 +23,12 @@ param(
     [switch]$NoEsp,
     [string]$Notes = "",
     [string]$Date = (Get-Date -Format "yyyy-MM-dd"),
+    # Which board the release is for:
+    #   rev5 - fits rev 5 boards only (the default; matches every pre-rev6 build)
+    #   rev6 - fits rev 6 boards only
+    #   all  - a unified binary that detects the board itself (commit db51428+)
+    [ValidateSet("rev5", "rev6", "all")]
+    [string]$Board = "rev5",
     # Which customer channel to publish into. "default" is the shared channel
     # at firmware\manifest.json; any other id publishes to
     # firmware\customers\<id>\manifest.json. Binaries always live once at the
@@ -98,6 +104,7 @@ if (-not $Version) {
     }
     $label = ($label -replace '[^0-9A-Za-z]', '')
     $Version = (Get-Date -Format "dd_MM_yy") + "_" + $label
+    if ($Board -eq "rev6") { $Version += "_rev6" }
 }
 
 # ---------------------------------------------------------------- validate
@@ -175,6 +182,7 @@ $newVersion = [ordered]@{
     version = $Version
     date    = $Date
     latest  = $true
+    board   = $Board
     notes   = $Notes
     controller = $entryMain
     system     = $entrySystem

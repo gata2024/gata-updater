@@ -299,3 +299,13 @@ details.picky[open] > summary { margin-bottom: 8px; }
   border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
 .bootguide ol.prep { margin: 6px 0 4px; }
+
+/* Board revision selector (rev 5 / rev 6). */
+.boardrow { align-items: center; margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line, #38507a); border-radius: 10px; overflow: hidden; }
+.segbtn {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  padding: 8px 16px; font-size: .95rem;
+}
+.segbtn + .segbtn { border-left: 1px solid var(--line, #38507a); }
+.segbtn.on { background: var(--accent, #0b57d0); color: #fff; font-weight: 600; }
