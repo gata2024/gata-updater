@@ -298,9 +298,12 @@ const App = {
     this.$("resultBox").classList.add("hidden");
     const hiddenFor = {
       controller: ["esp"],
-      cloud: ["app"],
+      cloud: ["app", "wipe"],
       both: [],
     }[mode || "both"] || [];
+    // The memory-preparation row only exists on a first installation.
+    const chk = this.$("chkFirstInstall");
+    if (!(chk && chk.checked) && !hiddenFor.includes("wipe")) hiddenFor.push("wipe");
     document.querySelectorAll("#stepList li").forEach(li => {
       li.className = "";
       li.classList.toggle("hidden", hiddenFor.includes(li.dataset.step));
@@ -553,6 +556,7 @@ const App = {
       await Flows.runFullUpdate({
         mode, pkg, version, preConnected,
         board: this.board(),
+        firstInstall: !!(this.$("chkFirstInstall") && this.$("chkFirstInstall").checked),
         demo: this.demo(),
         demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,

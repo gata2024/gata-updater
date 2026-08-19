@@ -176,6 +176,26 @@ class GataBootloader {
     Util.ok("Application verified.");
   }
 
+  /* First-installation preparation of the settings & logs memory (the second
+   * external flash): full chip erase + littlefs format, done by the update
+   * firmware (1.0.10+). The erase alone runs 1-7 minutes; the device sends
+   * DATA_ERASE:<seconds> heartbeats we surface through onTick. */
+  async formatData(onTick) {
+    this.clear();
+    await this.send("FORMAT_DATA");
+    await this.waitFor(["DATA_FORMAT_STARTED"], 4000, ["UNKNOWN_COMMAND"]);
+    const start = Date.now();
+    const timer = onTick ? setInterval(() => onTick((Date.now() - start) / 1000), 1000) : null;
+    try {
+      await this.waitFor(["DATA_FORMAT_COMPLETE"], 480000,
+        ["DATA_FORMAT_ERROR:NO_CHIP", "DATA_FORMAT_ERROR:ERASE_TIMEOUT", "DATA_FORMAT_ERROR:FS"]);
+    } finally {
+      if (timer) clearInterval(timer);
+    }
+    Util.ok("Settings & logs memory prepared (" +
+            Math.round((Date.now() - start) / 1000) + " s).");
+  }
+
   /* Restart the device into the application.
    * New resident bootloaders (>= 0x00010005) restore the version register and
    * reset SILENTLY - the app starts in ~3 s and the only signal is the USB

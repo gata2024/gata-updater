@@ -98,6 +98,12 @@
       <h2 data-i18n="s3.title">Update</h2>
     </div>
 
+    <label class="firstinstall">
+      <input type="checkbox" id="chkFirstInstall">
+      <span><b data-i18n="opt.firstInstall">First installation on this controller</b>
+      <small data-i18n="opt.firstInstallDesc">Also prepares the settings &amp; logs memory (full erase + format) so the controller starts clean. Do not use on a controller that is already in service — its settings and logs would be lost.</small></span>
+    </label>
+
     <div class="actions">
       <button id="btnUpdateNow" class="btn action prime one">
         <span class="acticon both"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg></span>
@@ -149,6 +155,7 @@
       <li data-step="download"><span class="dot"></span><div><b data-i18n="st.download">Download software</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="system"><span class="dot"></span><div><b data-i18n="st.system">System firmware</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="connect"><span class="dot"></span><div><b data-i18n="st.connect">Connect</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="wipe"><span class="dot"></span><div><b data-i18n="st.wipe">Memory preparation</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="esp"><span class="dot"></span><div><b data-i18n="st.esp">ESP32 module</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="app"><span class="dot"></span><div><b data-i18n="st.app">Controller software</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="finish"><span class="dot"></span><div><b data-i18n="st.finish">Finish</b><small></small><div class="bar"><i></i></div></div></li>

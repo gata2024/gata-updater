@@ -302,6 +302,11 @@ details.picky[open] > summary { margin-bottom: 8px; }
 
 /* Board revision selector (rev 5 / rev 6). */
 .boardrow { align-items: center; margin-bottom: 10px; }
+.firstinstall { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px;
+  padding: 10px 12px; border: 1px solid var(--line, #2a3550); border-radius: 10px; cursor: pointer; }
+.firstinstall input { margin-top: 3px; flex: none; }
+.firstinstall b { display: block; }
+.firstinstall small { color: var(--muted, #8ea0c0); display: block; margin-top: 2px; }
 .seg { display: inline-flex; border: 1px solid var(--line, #38507a); border-radius: 10px; overflow: hidden; }
 .segbtn {
   border: 0; background: transparent; color: inherit; cursor: pointer;

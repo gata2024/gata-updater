@@ -539,6 +539,27 @@ const Flows = {
       this._ck();
       step("app", "active", I18N.t("d.extErased"), 0.15);
 
+      /* First installation: also prepare the settings & logs memory (the
+       * second external flash) - full erase + littlefs format, mirroring the
+       * HMI's factory reset - so the controller boots clean on the first try
+       * instead of limping through its mount-failure recovery. Deliberately
+       * AFTER the app-flash erase: with no valid application present the
+       * update window cannot close mid-way through the minutes-long erase.
+       * This is independent of HOW update mode was reached (self-commanded
+       * or BOOT buttons) - a board can need BOOT mode without being new, and
+       * a new board usually IS in BOOT mode, but neither implies the other. */
+      if (ctx.firstInstall) {
+        if ((bl.blVersion || 0) >= 0x0001000A) {
+          step("wipe", "active", I18N.t("d.wipeStart"), null);
+          await bl.formatData(sec => step("wipe", "active",
+            I18N.t("d.wipeSec", { t: Math.round(sec) }), null));
+          this._ck();
+          step("wipe", "done", I18N.t("d.wipeDone"), 1);
+        } else {
+          step("wipe", "warn", I18N.t("d.wipeOld"), 1);
+        }
+      }
+
       /* ESP32 phase (mode "both" only) - BETWEEN erase and app install, and
        * the app region stays erased throughout it, which makes the ordering
        * bulletproof: with no valid app the bootloader never auto-exits, so

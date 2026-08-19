@@ -385,6 +385,23 @@ const T = {
     await bl2.verify();
     this.check("mock: verify OK", true);
 
+    /* ------------------------------------------------- first-install wipe */
+    this.check("wipe: handshake read BL 1.0.10 + board from the mock",
+      bl2.blVersion === 0x0001000A && bl2.boardRev === "rev5",
+      "blVersion=0x" + bl2.blVersion.toString(16) + " boardRev=" + bl2.boardRev);
+    let ticked = false;
+    await bl2.formatData(() => { ticked = true; });
+    this.check("wipe: FORMAT_DATA completes against the mock (with heartbeat)", ticked);
+    {
+      const fsrc = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      this.check("wipe: flow gates FORMAT_DATA on system firmware 1.0.10 and runs it AFTER the app-flash erase",
+        /ctx\.firstInstall/.test(fsrc) && /0x0001000A/.test(fsrc) && /d\.wipeOld/.test(fsrc) &&
+        fsrc.indexOf("await bl.format(") < fsrc.indexOf("await bl.formatData("));
+      const html = await (await fetch("../index.html", { cache: "no-store" })).text();
+      this.check("wipe: first-install checkbox exists and is separate from the BOOT-mode gate",
+        /chkFirstInstall/.test(html) && /data-step="wipe"/.test(html));
+    }
+
     /* ------------------------------------------------- summary */
     const pass = this.results.filter(r => r.ok).length;
     const fail = this.results.length - pass;
