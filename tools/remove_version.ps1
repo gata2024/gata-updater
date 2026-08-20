@@ -11,9 +11,16 @@ param(
     [Parameter(Mandatory = $true)] [string]$Version,
     [string]$Customer = "default",
     [switch]$KeepFiles,
-    [string]$FirmwareDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "firmware")
+    [string]$FirmwareDir
 )
 $ErrorActionPreference = "Stop"
+
+# $PSScriptRoot is NOT populated while PARAMETER DEFAULTS are evaluated in a
+# script that uses [Parameter()] attributes - the default silently became an
+# empty path and every run failed at Split-Path. Resolve the folder here, in
+# the body, where the automatic variables really exist.
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+if (-not $FirmwareDir) { $FirmwareDir = Join-Path (Split-Path -Parent $ScriptDir) "firmware" }
 
 $manifestPath = if ($Customer -and $Customer -ne "default") {
     Join-Path $FirmwareDir "customers\$Customer\manifest.json"
@@ -88,7 +95,7 @@ $json = $out | ConvertTo-Json -Depth 10
 [IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding $false))
 
 # ---- re-sign (an unsigned list is refused by every app) --------------------
-$keyPath = Join-Path $PSScriptRoot 'signing_key.json'
+$keyPath = Join-Path $ScriptDir 'signing_key.json'
 if (Test-Path $keyPath) {
     Add-Type -AssemblyName System.Security
     function FromB64Url([string]$s) {

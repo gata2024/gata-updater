@@ -34,10 +34,17 @@ param(
     # firmware\customers\<id>\manifest.json. Binaries always live once at the
     # root of firmware\ and are shared by every channel.
     [string]$Customer = "default",
-    [string]$FirmwareDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "firmware")
+    [string]$FirmwareDir
 )
 
 $ErrorActionPreference = "Stop"
+
+# $PSScriptRoot is NOT populated while PARAMETER DEFAULTS are evaluated in a
+# script that uses [Parameter()] attributes - the default silently became an
+# empty path and every run failed at Split-Path. Resolve the folder here, in
+# the body, where the automatic variables really exist.
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+if (-not $FirmwareDir) { $FirmwareDir = Join-Path (Split-Path -Parent $ScriptDir) "firmware" }
 
 function Get-Sha256([string]$path) { (Get-FileHash $path -Algorithm SHA256).Hash.ToLower() }
 
@@ -194,7 +201,7 @@ if (-not $NoEsp) {
 # does not match the customer's own license. Signed with tools\license_key.json
 # (the same key that mints customer licenses).
 $licEntry = $null
-$licKeyPath = Join-Path $PSScriptRoot 'license_key.json'
+$licKeyPath = Join-Path $ScriptDir 'license_key.json'
 if (Test-Path $licKeyPath) {
     function B64UrlL([byte[]]$b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+','-').Replace('/','_') }
     function FromB64UrlL([string]$s) {
@@ -263,7 +270,7 @@ $json = $out | ConvertTo-Json -Depth 10
 [IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding $false))
 
 # ---- sign the manifest (anti-tamper; the app refuses unsigned lists) -------
-$keyPath = Join-Path $PSScriptRoot 'signing_key.json'
+$keyPath = Join-Path $ScriptDir 'signing_key.json'
 if (Test-Path $keyPath) {
     Add-Type -AssemblyName System.Security
     function FromB64Url([string]$s) {
