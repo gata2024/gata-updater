@@ -66,7 +66,9 @@ const Cloud = {
     let lastErr = null;
     for (let i = 0; i < candidates.length; i++) {
       try {
-        return await this.fetchManifestFrom(candidates[i]);
+        const m = await this.fetchManifestFrom(candidates[i]);
+        this._rememberManifest(m._rawBytes, m._rawSig);
+        return m;
       } catch (e) {
         if (e && e.fatal) throw e;                 // signature verdict: stop here
         lastErr = e;
@@ -75,7 +77,53 @@ const Cloud = {
         }
       }
     }
+
+    /* Nothing answered - no signal, or the server is down. Fall back to the
+     * list this device saw last time. It is re-checked against the pinned
+     * signing key exactly like a fresh one, and firmware already downloaded
+     * onto the device installs from its own cache, so a technician can finish
+     * a job with no internet. */
+    const kept = await this._rememberedManifest();
+    if (kept) {
+      Util.warn("No internet - using the firmware list saved on this device" +
+                (kept.updated ? " (" + kept.updated + ")" : "") + ".");
+      kept._offline = true;
+      return kept;
+    }
     throw lastErr || new UploaderError("No firmware source could be reached.");
+  },
+
+  /* --- the last good list, kept for working without internet -------------- */
+  _keptKey() { return "gata.manifest." + this.activeChannel(); },
+
+  _rememberManifest(bytes, sig) {
+    try {
+      if (!bytes || !sig) return;
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      localStorage.setItem(this._keptKey(), JSON.stringify({ b: btoa(bin), s: sig }));
+    } catch (e) { /* storage full or private mode - not fatal */ }
+  },
+
+  async _rememberedManifest() {
+    let stored;
+    try { stored = JSON.parse(localStorage.getItem(this._keptKey()) || "null"); }
+    catch (e) { return null; }
+    if (!stored || !stored.b) return null;
+    const bin = atob(stored.b);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (APP_CONFIG.signingPublicKey) {
+      const sigBytes = Uint8Array.from(atob(stored.s), c => c.charCodeAt(0));
+      const ok = await this.verifySignedBytes(bytes, sigBytes, APP_CONFIG.signingPublicKey);
+      if (!ok) { Util.err("The saved firmware list failed its signature check - ignoring it."); return null; }
+    }
+    let m;
+    try { m = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { return null; }
+    try { this.validateManifest(m); this._requireOwnChannel(m, "saved list"); }
+    catch (e) { return null; }
+    m._baseUrl = new URL(this.manifestUrlCandidates()[0], location.href);
+    return m;
   },
 
   async fetchManifestFrom(url) {
@@ -116,6 +164,8 @@ const Cloud = {
       if (cur > prev) localStorage.setItem("gata.lastManifestDate", cur);
     } catch (e) { /* storage unavailable - not fatal */ }
     manifest._baseUrl = new URL(url, location.href);
+    manifest._rawBytes = bytes;                 // kept for the offline fallback
+    manifest._rawSig = this._lastSigB64 || null;
     Util.ok("Firmware list loaded: " + manifest.versions.length + " version(s) available.");
     return manifest;
   },
@@ -134,8 +184,13 @@ const Cloud = {
       throw e;
     }
     let sig = null;
-    try { sig = Uint8Array.from(atob((await res.text()).trim()), c => c.charCodeAt(0)); }
+    let sigB64 = null;
+    try {
+      sigB64 = (await res.text()).trim();
+      sig = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0));
+    }
     catch (e) { /* malformed base64 -> invalid */ }
+    this._lastSigB64 = sigB64;      // kept so the list can be saved for offline use
     const ok = sig && sig.length >= 64 &&
       await this.verifySignedBytes(bytes, sig, APP_CONFIG.signingPublicKey);
     if (!ok) {

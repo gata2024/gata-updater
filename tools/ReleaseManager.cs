@@ -30,7 +30,7 @@ class ReleaseManager : Form
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog, txtDest;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk, btnBuiltIn;
     ListView lstCloud;
     string lastBuiltFolder;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
@@ -173,8 +173,9 @@ class ReleaseManager : Form
         btnApk = Mk("ANDROID APP (.apk)", 684, y, 160, (s, e) => BuildApk());
         btnApk.Height = 34;
         y += 40;
-        btnBackup = Mk("Back up keys", 24, y, 120, (s, e) => BackupKeys());
-        btnOpenGuide = Mk("Guide", 154, y, 80, (s, e) => OpenGuide());
+        btnBuiltIn = Mk("FIRMWARE INSIDE THE APP", 24, y, 200, (s, e) => RefreshBuiltIn());
+        btnBackup = Mk("Back up keys", 234, y, 120, (s, e) => BackupKeys());
+        btnOpenGuide = Mk("Guide", 364, y, 80, (s, e) => OpenGuide());
         y += 36;
 
         // ---------------- 5. what is in the cloud right now ----------------
@@ -522,6 +523,7 @@ class ReleaseManager : Form
         bar.Visible = on;
         btnPublish.Enabled = btnBuildFolder.Enabled = btnNewCompany.Enabled = btnBackup.Enabled = !on;
         if (btnApk != null) btnApk.Enabled = !on;
+        if (btnBuiltIn != null) btnBuiltIn.Enabled = !on;
         if (btnRemove != null) btnRemove.Enabled = !on;
         Cursor = on ? Cursors.WaitCursor : Cursors.Default;
     }
@@ -1216,6 +1218,75 @@ class ReleaseManager : Form
                                     "It needs Android Studio (JDK), the Android SDK and Node/npx on this PC.",
                                     "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
+            }
+            catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
+            finally { Busy(false); }
+        }) { IsBackground = true }.Start();
+    }
+
+    /* Put the chosen firmware INSIDE the app itself: the files land in the
+     * app's own main_firmware\ / cloud_firmware\ and are listed in
+     * builtin.json, which the phone app stores on the device at first start.
+     * From then on that phone can update a controller with no internet.
+     * Deploy the app afterwards for phones to pick it up. */
+    void RefreshBuiltIn()
+    {
+        if (Ask("Put the firmware chosen above INSIDE the app?\n\n" +
+                "Phones that install the app then carry this firmware and can\n" +
+                "update a controller with no internet.\n\n" +
+                "Deploy the app afterwards (git push) so phones receive it.",
+                "Firmware inside the app", MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Question) != DialogResult.OK) return;
+
+        Busy(true);
+        new Thread(() =>
+        {
+            try
+            {
+                Status("Putting the firmware inside the app...");
+                Log("");
+                Log("=== firmware included with the app ===");
+                string mainDir = Path.Combine(AppDir, "main_firmware");
+                string cloudDir = Path.Combine(AppDir, "cloud_firmware");
+                Directory.CreateDirectory(mainDir);
+                Directory.CreateDirectory(cloudDir);
+                foreach (var f in Directory.GetFiles(mainDir, "*.bin")) File.Delete(f);
+                foreach (var f in Directory.GetFiles(cloudDir, "*.bin")) File.Delete(f);
+
+                string who = SelectedChannel() == "default" ? "General" : Pretty(SelectedChannel());
+                string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : "rev5";
+                int n = CopySelectedFirmware(AppDir, who, board, txtCtrl.Text, txtSys.Text,
+                                             chkEsp.Checked ? txtEsp.Text : null, Log);
+
+                // the listing a static host (and the phone) can read
+                var sb = new StringBuilder();
+                sb.Append("{\n  \"note\": \"Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.\",\n");
+                Action<string, string> section = (folder, key) =>
+                {
+                    sb.Append("  \"").Append(key).Append("\": [");
+                    var files = Directory.GetFiles(Path.Combine(AppDir, folder), "*.bin")
+                                         .OrderBy(x => x).ToArray();
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        var fi = new FileInfo(files[i]);
+                        sb.Append(i == 0 ? "\n" : ",\n");
+                        sb.Append("    { \"name\": \"").Append(fi.Name).Append("\", \"size\": ").Append(fi.Length).Append(" }");
+                    }
+                    sb.Append(files.Length > 0 ? "\n  ]" : "]");
+                };
+                section("main_firmware", "main_firmware");
+                sb.Append(",\n");
+                section("cloud_firmware", "cloud_firmware");
+                sb.Append("\n}\n");
+                File.WriteAllText(Path.Combine(AppDir, "builtin.json"), sb.ToString(), new UTF8Encoding(false));
+
+                Log("   builtin.json written (" + n + " file(s) included with the app)");
+                Log("=== DONE - now deploy the app so phones receive it ===");
+                Status("Firmware is inside the app - deploy it to reach phones.");
+                Ask("Done - the app now carries this firmware.\n\n" +
+                    "Deploy the app (push to GitHub) so installed phones receive it,\n" +
+                    "and rebuild the .apk only if you also changed the app itself.",
+                    "Firmware inside the app", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
             finally { Busy(false); }

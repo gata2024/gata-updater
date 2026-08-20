@@ -1,0 +1,31 @@
+{
+  "note": "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.",
+  "main_firmware": [
+    {
+      "name": "controller_19_8_27_rev6.bin",
+      "size": 892988
+    },
+    {
+      "name": "system_19_8_26.bin",
+      "size": 120140
+    }
+  ],
+  "cloud_firmware": [
+    {
+      "name": "boot_app0.bin",
+      "size": 8192
+    },
+    {
+      "name": "bootloader.bin",
+      "size": 17536
+    },
+    {
+      "name": "firmware.bin",
+      "size": 1269360
+    },
+    {
+      "name": "partitions.bin",
+      "size": 3072
+    }
+  ]
+}

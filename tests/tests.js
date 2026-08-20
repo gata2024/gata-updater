@@ -206,6 +206,50 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ------------------ firmware on the device: built-in, picked, remembered */
+    {
+      /* (1) firmware that ships WITH the app - what puts binaries on a phone */
+      const bi = await (await fetch("../builtin.json", { cache: "no-store" })).json();
+      this.check("built-in: the app publishes a listing of the firmware it carries",
+        Array.isArray(bi.main_firmware) && bi.main_firmware.length > 0);
+      const swsrc2 = await (await fetch("../sw.js", { cache: "no-store" })).text();
+      this.check("built-in: the service worker stores that firmware on the device at first run",
+        /cacheBuiltinFirmware/.test(swsrc2) && /builtin\.json/.test(swsrc2) &&
+        /main_firmware\//.test(swsrc2));
+      const lsrc3 = await (await fetch("../js/localsource.js", { cache: "no-store" })).text();
+      this.check("built-in: a static host (phone) reads the listing instead of __local_list",
+        /builtin\.json/.test(lsrc3));
+
+      /* (2) files the user picks from the device */
+      const mkf = (name, len, w0, w1, first) => {
+        const a = new Uint8Array(len);
+        if (w0 !== undefined) { const d = new DataView(a.buffer); d.setUint32(0, w0, true); d.setUint32(4, w1, true); }
+        if (first !== undefined) { a[0] = first; if (first === 0xAA) a[1] = 0x50; }
+        return new File([a], name);
+      };
+      const picked = await LocalSource.fromFiles([
+        mkf("controller_x_rev5.bin", 400, 0x24080000, 0x90000135),
+        mkf("system_x_rev5.bin", 300, 0x20020000, 0x08000299),
+        mkf("bootloader.bin", 100, undefined, undefined, 0xE9),
+        mkf("partitions.bin", 64, undefined, undefined, 0xAA),
+        mkf("boot_app0.bin", 32),
+        mkf("firmware.bin", 500, undefined, undefined, 0xE9),
+      ]);
+      this.check("picked files: the six .bin files are recognised by name",
+        picked.system === "system_x_rev5.bin" && picked.mains.length === 1 && picked.espComplete === true);
+      const ppkg = await LocalSource.load(picked, { controller: true, system: true, esp: "optional" }, null, () => {});
+      let pok = true;
+      try { Validate.checkPackage(ppkg, { controller: true, system: true, esp: true }); } catch (e) { pok = false; }
+      this.check("picked files: they load and pass the same checks as any other source",
+        pok && ppkg.controller.length === 400 && ppkg.system.length === 300);
+
+      /* (3) the firmware list remembered for use without internet */
+      const csrc2 = await (await fetch("../js/cloud.js", { cache: "no-store" })).text();
+      this.check("offline list: the last good list is saved and re-checked against the signing key",
+        /_rememberManifest/.test(csrc2) && /_rememberedManifest/.test(csrc2) &&
+        /verifySignedBytes\(bytes, sigBytes, APP_CONFIG\.signingPublicKey\)/.test(csrc2));
+    }
+
     /* ------------------------- boards WITHOUT a cloud module (no ESP files) */
     {
       /* A release published with the ESP32 unticked has no esp entry at all.
@@ -249,9 +293,10 @@ const T = {
 
       /* the phone app (and hosted web app) has no uploader folder */
       const appsrc = await (await fetch("../js/app.js", { cache: "no-store" })).text();
-      this.check("phone: the 'files in this folder' source is offered only where a local server serves it",
-        /canUseLocal\(\)/.test(appsrc) && /127\\\.0\\\.0\\\.1\|localhost/.test(appsrc) &&
-        /btnUseLocal.*classList\.add\("hidden"\)|if \(b\) b\.classList\.add\("hidden"\)/.test(appsrc));
+      this.check("phone: the offline source is the uploader folder on a PC, the built-in firmware on a phone, and hidden when neither exists",
+        /canUseLocal\(\)/.test(appsrc) && /detectOfflineSource/.test(appsrc) &&
+        /offlineSource = "folder"/.test(appsrc) && /offlineSource = "builtin"/.test(appsrc) &&
+        /classList\.toggle\("hidden", !this\.offlineSource\)/.test(appsrc));
       /* app.js is not loaded here (it drives the real UI), so exercise the same
        * rule directly: only a locally served copy may offer the folder. */
       const localRule = (h, proto) =>

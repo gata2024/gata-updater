@@ -59,7 +59,24 @@ const LocalSource = {
         cloudEntries = this._asArray(j.cloud_firmware);
         viaListing = true;
       }
-    } catch (e) { /* static host - fall through to probing */ }
+    } catch (e) { /* static host - fall through */ }
+
+    /* No local server (the phone app, or the plain website): the firmware that
+     * SHIPS WITH THE APP is listed in builtin.json. The service worker stores
+     * those files on first run, so from then on they are on the device and
+     * work with no internet at all - the same files, the same checks, just a
+     * listing a static host can serve. */
+    if (!mainEntries) {
+      try {
+        const r = await fetch(this._url("builtin.json"), { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          mainEntries = this._asArray(j.main_firmware);
+          cloudEntries = this._asArray(j.cloud_firmware);
+          viaListing = true;
+        }
+      } catch (e) { /* not published with built-in firmware - fall through */ }
+    }
 
     if (!mainEntries) {
       mainEntries = [];
@@ -100,6 +117,43 @@ const LocalSource = {
       "system=" + (found.system || "none") +
       " controller=[" + found.mains.map(x => x.name).join(", ") + "]" +
       " cloud=" + (found.espComplete ? "complete" : (m.esp.firmware ? "firmware-only" : "none")));
+    return found;
+  },
+
+  /* Firmware the user picked from the device itself (phone or PC). Same file
+   * names the uploader folder uses, so a set sent by e-mail/WhatsApp installs
+   * without any folder or internet. Files are sorted by name, exactly as the
+   * folder scan does, and validated the same way afterwards. */
+  async fromFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return null;
+    const names = files.map(f => f.name);
+    const m = this.matchNames(names, names);          // one pool: classify by name
+    const byName = {};
+    for (const f of files) byName[f.name] = f;
+
+    const read = async (name) => {
+      const f = byName[name];
+      if (!f) return null;
+      return new Uint8Array(await f.arrayBuffer());
+    };
+
+    const found = {
+      viaListing: true,
+      picked: true,
+      system: m.system,
+      mains: m.mains.map(n => ({ name: n, size: (byName[n] || {}).size || 0 })),
+      esp: m.esp,
+      espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
+      receipt: null,
+      sizeOf: files.reduce((o, f) => { o[f.name] = f.size; return o; }, {}),
+      builtAt: () => null,
+      _read: read,
+    };
+    Util.info("Picked from this device: " +
+      (found.system || "no system firmware") + ", " +
+      (found.mains.length ? found.mains.map(x => x.name).join(", ") : "no controller software") +
+      (found.esp.firmware ? ", cloud module" : ""));
     return found;
   },
 
@@ -150,6 +204,33 @@ const LocalSource = {
     const report = (name, f) => { if (onProgress) onProgress(name, f); };
     const pkg = { controller: null, system: null, esp: null };
     const receipt = found.receipt;
+
+    /* Files chosen from the device are already in hand - read them straight
+     * from the picker instead of fetching URLs that do not exist. */
+    if (found.picked) {
+      if (needs.controller) {
+        const chosen = mainName || (found.mains[0] && found.mains[0].name);
+        if (!chosen) throw new UploaderError(I18N.t("local.noMain"), I18N.t("local.hintPick"));
+        pkg.controller = await found._read(chosen);
+        report(chosen, 1);
+      }
+      if (needs.system) {
+        if (!found.system) throw new UploaderError(I18N.t("local.noBoot"), I18N.t("local.hintPick"));
+        pkg.system = await found._read(found.system);
+        report(found.system, 1);
+      }
+      if (needs.esp !== "no") {
+        if (found.esp.firmware) {
+          pkg.esp = {};
+          for (const part of ["bootloader", "partitions", "boot_app0", "firmware"]) {
+            if (found.esp[part]) pkg.esp[part] = await found._read(found.esp[part]);
+          }
+        } else if (needs.esp === "required") {
+          throw new UploaderError(I18N.t("err.noEspFiles"), I18N.t("local.hintPick"));
+        }
+      }
+      return pkg;
+    }
 
     if (needs.controller) {
       const chosen = mainName || (found.mains[0] && found.mains[0].name);

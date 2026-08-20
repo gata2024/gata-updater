@@ -54,12 +54,7 @@ const App = {
     /* License first: it decides the firmware channel, so the manifest can
      * only be loaded after it. Without one, the app shows the license card
      * and waits - nothing else works until a valid license is entered. */
-    /* Phone/hosted app: no uploader folder exists, so hide that source. */
-    if (!this.canUseLocal()) {
-      const b = this.$("btnUseLocal");
-      if (b) b.classList.add("hidden");
-      this.localMode = false;
-    }
+    await this.detectOfflineSource();
 
     await License.loadStored();
     this.renderLicense();
@@ -128,6 +123,31 @@ const App = {
   canUseLocal() {
     if (location.protocol === "file:") return true;
     return /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+  },
+
+  /* Which firmware-without-the-internet source this copy has:
+   *   "folder"  - served by the uploader folder's own little server (a PC)
+   *   "builtin" - firmware that SHIPS WITH THE APP; the service worker stores
+   *               it on the device at first start, so a phone can update with
+   *               no signal at all
+   *   null      - neither; only the cloud (and files the user picks)
+   * The offline button is labelled for whichever one is real. */
+  async detectOfflineSource() {
+    this.offlineSource = null;
+    if (this.canUseLocal()) {
+      this.offlineSource = "folder";
+    } else {
+      try {
+        const r = await fetch("builtin.json", { cache: "no-store" });
+        if (r.ok) this.offlineSource = "builtin";
+      } catch (e) { /* no built-in firmware published with this app */ }
+    }
+    const b = this.$("btnUseLocal");
+    if (!b) return;
+    b.classList.toggle("hidden", !this.offlineSource);
+    if (this.offlineSource === "builtin") b.textContent = I18N.t("btn.useBuiltin");
+    const hint = this.$("localHint");
+    if (hint && this.offlineSource === "builtin") hint.textContent = I18N.t("local.hintBuiltin");
   },
 
   demo() { return localStorage.getItem("gata.demo") === "1"; },
@@ -765,7 +785,13 @@ const App = {
     this.$("btnUpdBoth").onclick = () => this.onUpdate("both");
     this.$("btnCancel").onclick = () => { Flows.cancel(); Util.warn("Cancelling…"); };
     this.$("btnRefresh").onclick = () => this.loadManifest();
-    this.$("btnRescan").onclick = () => this.scanLocal();
+    /* "Scan again" belongs to the folder/built-in sources; for hand-picked
+     * files it would throw away what the user just chose, so re-open the
+     * picker instead. */
+    this.$("btnRescan").onclick = () => {
+      if (this.localFound && this.localFound.picked) pick();
+      else this.scanLocal();
+    };
 
     this.$("btnUseLocal").onclick = () => {
       this.localMode = true;
@@ -776,9 +802,36 @@ const App = {
     };
     this.$("btnUseCloud").onclick = () => {
       this.localMode = false;
+      this.localFound = null;                 // drop anything picked by hand
       this.$("localPane").classList.add("hidden");
       this.$("cloudPane").classList.remove("hidden");
       this.$("srcBadge").textContent = I18N.t("badge.cloud");
+      this.$("localHint").textContent =
+        I18N.t(this.offlineSource === "builtin" ? "local.hintBuiltin" : "local.hint");
+    };
+
+    /* Firmware files chosen from the device itself - works on a phone with no
+     * internet and no uploader folder. */
+    const pick = () => this.$("fwFiles").click();
+    this.$("btnPickFiles").onclick = pick;
+    this.$("btnPickFiles2").onclick = pick;
+    this.$("fwFiles").onchange = async e => {
+      const files = e.target.files;
+      e.target.value = "";
+      if (!files || !files.length) return;
+      const found = await LocalSource.fromFiles(files);
+      if (!found || (!found.system && !found.mains.length && !found.esp.firmware)) {
+        Util.err(I18N.t("local.pickNothing"));
+        return;
+      }
+      this.localFound = found;
+      this.localMainSel = found.mains.length ? found.mains[0].name : null;
+      this.localMode = true;
+      this.$("cloudPane").classList.add("hidden");
+      this.$("localPane").classList.remove("hidden");
+      this.$("srcBadge").textContent = I18N.t("badge.picked");
+      this.$("localHint").textContent = I18N.t("local.hintPicked");
+      this.renderLocal();
     };
 
     this.$("btnLicOpen").onclick = () => this.$("licFile").click();

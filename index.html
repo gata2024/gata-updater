@@ -79,16 +79,21 @@
       <div class="row gap wrap">
         <button id="btnRefresh" class="btn ghost" data-i18n="btn.refresh">Refresh list</button>
         <button id="btnUseLocal" class="btn ghost" data-i18n="btn.useLocal">Use files from this device instead</button>
+        <button id="btnPickFiles" class="btn ghost" data-i18n="btn.pickFiles">Choose firmware files…</button>
       </div>
     </div>
     <div id="localPane" class="hidden">
-      <p class="muted" data-i18n="local.hint">Files found in the main_firmware and cloud_firmware folders inside the uploader:</p>
+      <p id="localHint" class="muted" data-i18n="local.hint">Files found in the main_firmware and cloud_firmware folders inside the uploader:</p>
       <div id="localList" class="locallist"></div>
       <div class="row gap wrap">
         <button id="btnRescan" class="btn ghost" data-i18n="local.rescan">Scan again</button>
+        <button id="btnPickFiles2" class="btn ghost" data-i18n="btn.pickFiles">Choose firmware files…</button>
         <button id="btnUseCloud" class="btn ghost" data-i18n="btn.useCloud">Back to cloud versions</button>
       </div>
     </div>
+    <!-- multi-select: the .bin files can be sent to a phone and installed with
+         no internet and no uploader folder -->
+    <input type="file" id="fwFiles" multiple hidden>
   </section>
 
   <!-- STEP 2 : prepare board -->
