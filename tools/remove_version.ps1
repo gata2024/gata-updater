@@ -34,7 +34,12 @@ $target = $manifest.versions | Where-Object { $_.version -eq $Version }
 if (-not $target) { throw "Version '$Version' is not in the '$Customer' channel." }
 
 $remaining = @($manifest.versions | Where-Object { $_.version -ne $Version })
-if ($remaining.Count -eq 0) { throw "Refusing to remove the LAST version of a channel - publish a replacement first." }
+if ($remaining.Count -eq 0) {
+    # Allowed on purpose: a channel may be emptied (e.g. a release was wrong and
+    # nothing should be offered until the replacement is ready). The channel
+    # itself stays, so publishing later fills it again.
+    Write-Host "NOTE: this was the last version - the channel will be EMPTY until you publish again." -ForegroundColor Yellow
+}
 
 Write-Host "== Removing $Version from channel '$Customer' ==" -ForegroundColor Cyan
 
@@ -81,8 +86,10 @@ if (-not $KeepFiles) {
 
 # ---- the newest remaining entry becomes "latest" ---------------------------
 foreach ($v in $remaining) { if ($v.PSObject.Properties["latest"]) { $v.latest = $false } }
-if ($remaining[0].PSObject.Properties["latest"]) { $remaining[0].latest = $true }
-else { $remaining[0] | Add-Member -NotePropertyName latest -NotePropertyValue $true }
+if ($remaining.Count -gt 0) {
+    if ($remaining[0].PSObject.Properties["latest"]) { $remaining[0].latest = $true }
+    else { $remaining[0] | Add-Member -NotePropertyName latest -NotePropertyValue $true }
+}
 
 $out = [ordered]@{
     product  = $manifest.product
@@ -119,8 +126,13 @@ if (Test-Path $keyPath) {
     Write-Host "WARNING: tools\signing_key.json not found - manifest NOT signed." -ForegroundColor Yellow
 }
 
-Write-Host ("Removed. {0} file(s) deleted; {1} version(s) left; latest is now {2}." -f `
-            $deleted, $remaining.Count, $remaining[0].version) -ForegroundColor Green
+if ($remaining.Count -gt 0) {
+    Write-Host ("Removed. {0} file(s) deleted; {1} version(s) left; latest is now {2}." -f `
+                $deleted, $remaining.Count, $remaining[0].version) -ForegroundColor Green
+} else {
+    Write-Host ("Removed. {0} file(s) deleted; the channel is now EMPTY - publish to fill it again." -f `
+                $deleted) -ForegroundColor Yellow
+}
 
 # ---- publish the change ----------------------------------------------------
 if (Test-Path (Join-Path $FirmwareDir ".git")) {

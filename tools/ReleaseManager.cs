@@ -30,7 +30,7 @@ class ReleaseManager : Form
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud;
     ListView lstCloud;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
@@ -173,10 +173,15 @@ class ReleaseManager : Form
         lstCloud.Columns.Add("Notes", 240);
         Controls.Add(lstCloud);
 
-        btnRemove = Mk("Remove selected", 734, y, 140, (s, e) => RemoveSelected());
+        /* Anchored to the RIGHT edge: with Top|Left they stayed put while the
+         * list stretched on a wide window and swallowed them. */
+        btnRemove = Mk(ClientSize.Width - 164, y, 140, "Remove selected", (s, e) => RemoveSelected());
         btnRemove.Height = 30;
         btnRemove.ForeColor = Color.FromArgb(170, 30, 30);
-        Mk("Refresh", 734, y + 36, 140, (s, e) => LoadCloudList());
+        btnRemove.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnRefreshCloud = Mk(ClientSize.Width - 164, y + 36, 140, "Refresh", (s, e) => LoadCloudList());
+        btnRefreshCloud.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lstCloud.Width = ClientSize.Width - 24 - 164 - 10;
         y += 160;
 
         bar = new ProgressBar { Left = 24, Top = y, Width = 820, Height = 6, Style = ProgressBarStyle.Marquee, Visible = false };
@@ -327,10 +332,14 @@ class ReleaseManager : Form
         string channel = SelectedChannel();
         string who = channel == "default" ? "General" : Pretty(channel);
 
-        if (MessageBox.Show("Remove " + ver + " from " + who + "?\n\n" +
-                            "It disappears from their updater and its files are deleted.\n" +
-                            "Controllers already updated are NOT affected.",
-                            "Remove version", MessageBoxButtons.OKCancel,
+        bool isLast = lstCloud.Items.Count == 1;
+        string warn = "Remove " + ver + " from " + who + "?\n\n" +
+                      "It disappears from their updater and its files are deleted.\n" +
+                      "Controllers already updated are NOT affected.";
+        if (isLast)
+            warn += "\n\nThis is their LAST version - " + who + " will have nothing to " +
+                    "download until you publish again. Their uploader folder still works offline.";
+        if (MessageBox.Show(warn, "Remove version", MessageBoxButtons.OKCancel,
                             MessageBoxIcon.Warning) != DialogResult.OK) return;
 
         Busy(true);
@@ -390,6 +399,9 @@ class ReleaseManager : Form
         Controls.Add(b);
         return b;
     }
+
+    // same, argument order matching the right-anchored buttons below
+    Button Mk(int x, int y, int w, string text, EventHandler onClick) { return Mk(text, x, y, w, onClick); }
 
     void Browse(TextBox target, string filter)
     {
