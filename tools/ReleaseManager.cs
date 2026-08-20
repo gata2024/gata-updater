@@ -118,6 +118,11 @@ class ReleaseManager : Form
         lblCtrlFp = FpLabel(y); y += 22;
 
         chkSystem = new CheckBox { Left = 24, Top = y + 2, Width = 154, Text = "System firmware", Checked = true };
+        toolTip.SetToolTip(chkSystem,
+            "Ticked: publish this system firmware as part of the release.\n" +
+            "Unticked: the release keeps the system firmware already on the server\n" +
+            "(use it when only the controller software changed).\n\n" +
+            "A customer folder ALWAYS includes the system firmware - the updater needs it.");
         Controls.Add(chkSystem);
         txtSys = new TextBox { Left = 178, Top = y, Width = 620 };
         Controls.Add(txtSys);
@@ -686,9 +691,16 @@ class ReleaseManager : Form
                 {
                     string dest = Path.Combine(parent, "Uploader_" + who.Replace(" ", "_") + "_" + board);
                     Status("Building " + board + "...");
+                    /* The system firmware always goes in: the updater needs it
+                     * for EVERY action (it is what a controller with very old
+                     * software is recovered with), so a folder without it
+                     * fails on the first step. The tick box only decides
+                     * whether a NEW system firmware is PUBLISHED.
+                     * The cloud module is genuinely optional - boards without
+                     * an ESP32 do not need it. */
                     var problems = BuildFolderCore(channel, dest, board,
                         txtCtrl.Text,
-                        chkSystem.Checked ? txtSys.Text : null,
+                        txtSys.Text,
                         chkEsp.Checked ? txtEsp.Text : null,
                         Log);
                     if (problems.Count > 0) allProblems.AddRange(problems);
@@ -787,6 +799,14 @@ class ReleaseManager : Form
                                         @"tools\serve.ps1", @"tools\check_auto_connect.ps1",
                                         @"tools\enable_auto_connect.ps1", @"js\app.js", @"js\license.js" })
             if (!File.Exists(Path.Combine(dest, need))) problems.Add("MISSING: " + need);
+
+        /* The two the updater cannot work without. (The cloud module is not
+         * checked - a board without an ESP32 legitimately has none.) */
+        string mainDirChk = Path.Combine(dest, "main_firmware");
+        if (!Directory.Exists(mainDirChk) || Directory.GetFiles(mainDirChk, "controller*.bin").Length == 0)
+            problems.Add("MISSING: main_firmware\\controller*.bin - the controller software");
+        if (!Directory.Exists(mainDirChk) || Directory.GetFiles(mainDirChk, "system*.bin").Length == 0)
+            problems.Add("MISSING: main_firmware\\system*.bin - the updater needs it for every action");
         foreach (string secret in new[] { @"tools\signing_key.json", @"tools\license_key.json",
                                           @"tools\licenses_issued.txt", @"tools\publish_firmware.ps1",
                                           @"tools\make_license.ps1", "GATA_Release_Manager.exe" })
