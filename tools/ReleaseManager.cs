@@ -481,6 +481,18 @@ class ReleaseManager : Form
             if (d.ShowDialog() == DialogResult.OK) target.Text = d.SelectedPath;
     }
 
+    /* Dialogs raised from a worker thread have no owner: Windows can put them
+     * BEHIND the main window, and since the buttons are disabled while the job
+     * runs, the program looks frozen while it is really waiting for an answer
+     * nobody can see. Always ask on the UI thread, owned by this window. */
+    DialogResult Ask(string text, string title, MessageBoxButtons buttons, MessageBoxIcon icon)
+    {
+        if (InvokeRequired)
+            return (DialogResult)Invoke(new Func<DialogResult>(
+                () => MessageBox.Show(this, text, title, buttons, icon)));
+        return MessageBox.Show(this, text, title, buttons, icon);
+    }
+
     void Log(string s)
     {
         if (txtLog.InvokeRequired) { txtLog.BeginInvoke((Action)(() => Log(s))); return; }
@@ -551,6 +563,7 @@ class ReleaseManager : Form
     // Run a PowerShell script and stream its output into the log.
     int RunPs(string script, string argLine)
     {
+        string baseStatus = lblStatus.Text.Length > 0 ? lblStatus.Text : "Working...";
         string cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File \"" +
                      Path.Combine(ToolsDir, script) + "\" " + argLine;
         Log("");
@@ -573,7 +586,23 @@ class ReleaseManager : Form
             p.Start();
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
-            p.WaitForExit();
+            /* Bounded wait: the parameterless WaitForExit() also waits for the
+             * output pipes, which a stray grandchild process (a Java/Gradle
+             * helper, say) can hold open long after the work is done - the
+             * window would sit there looking dead. Wait for the PROCESS, then
+             * give the last lines a moment to arrive. */
+            var clock = Stopwatch.StartNew();
+            while (!p.WaitForExit(1000))
+            {
+                Status(baseStatus + "  (" + (int)clock.Elapsed.TotalSeconds + " s)");
+                if (clock.Elapsed.TotalMinutes > 30)
+                {
+                    Log("   ! still running after 30 minutes - stopping it");
+                    try { p.Kill(); } catch { }
+                    return -1;
+                }
+            }
+            Thread.Sleep(300);
             return p.ExitCode;
         }
     }
@@ -710,14 +739,14 @@ class ReleaseManager : Form
                 if (allProblems.Count > 0)
                 {
                     Status("Problems found - see the log.");
-                    MessageBox.Show("Not everything is ready to send:\n\n" +
+                    Ask("Not everything is ready to send:\n\n" +
                                     string.Join("\n\n", allProblems.ToArray()),
                                     "Check failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     if (made.Count == 0) return;
                 }
                 Status("Done - " + made.Count + " folder(s) ready to send.");
                 if (made.Count > 0 &&
-                    MessageBox.Show("Ready:\n\n" + string.Join("\n", made.ToArray()) + "\n\nOpen now?", "Done",
+                    Ask("Ready:\n\n" + string.Join("\n", made.ToArray()) + "\n\nOpen now?", "Done",
                                     MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                     Process.Start("explorer.exe", "\"" + made[0] + "\"");
             }
@@ -1165,14 +1194,14 @@ class ReleaseManager : Form
                     Log("=== APK READY: " + apk + "  (" + string.Format("{0:N0}", fi.Length) + " bytes) ===");
                     Log("Send it to the phone and open it (Android asks to allow installing from this source).");
                     Status("Android app ready.");
-                    if (MessageBox.Show("Android app built:\n\n" + apk + "\n\nOpen the folder?",
+                    if (Ask("Android app built:\n\n" + apk + "\n\nOpen the folder?",
                                         "Done", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                         Process.Start("explorer.exe", "/select,\"" + apk + "\"");
                 }
                 else
                 {
                     Status("APK build failed - see the log.");
-                    MessageBox.Show("The Android build did not finish - see the log.\n\n" +
+                    Ask("The Android build did not finish - see the log.\n\n" +
                                     "It needs Android Studio (JDK), the Android SDK and Node/npx on this PC.",
                                     "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
