@@ -305,9 +305,24 @@ const App = {
       return div;
     };
 
+    /* The receipt written when this folder was built. Showing its fingerprints
+     * lets you check at a glance that these are the exact .bin files that were
+     * put in - and the app refuses to install anything that disagrees. */
+    const fp = (rel) => {
+      const h = f.receipt && f.receipt.files ? f.receipt.files[rel] : null;
+      return h ? "   ·   " + h.slice(0, 16) : "";
+    };
+    if (f.receipt) {
+      const b = document.createElement("div");
+      b.className = "lrow lok";
+      b.innerHTML = "<b>" + I18N.t("local.receipt") + "</b><span>" +
+        I18N.t("local.receiptFor", { c: f.receipt.company || "?", d: f.receipt.built || "?" }) + "</span>";
+      list.appendChild(b);
+    }
+
     // System firmware pair
     row(!!f.system, I18N.t("local.sys"),
-      f.system ? f.system : I18N.t("local.missing") + " (system*.bin)");
+      f.system ? f.system + fp("main_firmware/" + f.system) : I18N.t("local.missing") + " (system*.bin)");
 
     // Controller software (radio choice when several M*.bin exist)
     if (!f.mains.length) {
@@ -316,7 +331,8 @@ const App = {
     } else if (f.mains.length === 1) {
       this.localMainSel = f.mains[0].name;
       row(true, I18N.t("local.main"),
-        f.mains[0].name + (f.mains[0].size ? " (" + Util.fmtBytes(f.mains[0].size) + ")" : ""));
+        f.mains[0].name + (f.mains[0].size ? " (" + Util.fmtBytes(f.mains[0].size) + ")" : "") +
+        fp("main_firmware/" + f.mains[0].name));
     } else {
       if (!this.localMainSel || !f.mains.some(m => m.name === this.localMainSel)) {
         this.localMainSel = f.mains[0].name;

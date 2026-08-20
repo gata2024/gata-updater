@@ -72,6 +72,14 @@ const LocalSource = {
       }
     }
 
+    /* The receipt written when this folder was built: file -> SHA-256. Used
+     * to prove the .bin files here are exactly the ones that were put in. */
+    let receipt = null;
+    try {
+      const r = await fetch(this._url("firmware_receipt.json"), { cache: "no-store" });
+      if (r.ok) receipt = await r.json();
+    } catch (e) { /* folders built before receipts existed - just no proof */ }
+
     const m = this.matchNames(mainEntries.map(e => e.name), cloudEntries.map(e => e.name));
     const sizeOf = {};
     for (const e of mainEntries) sizeOf[e.name] = e.size;
@@ -81,6 +89,7 @@ const LocalSource = {
       mains: m.mains.map(name => ({ name, size: sizeOf[name] || 0 })),
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
+      receipt,
     };
     Util.info("Local folder scan (" + (viaListing ? "listing" : "name probe") + "): " +
       "system=" + (found.system || "none") +
@@ -106,9 +115,36 @@ const LocalSource = {
   /* Load the files a given action needs.
    * needs = { controller, system, esp: "no"|"optional"|"required" };
    * mainName = the chosen controller file. */
+  /* Prove a .bin is EXACTLY the file that was put into this folder.
+   *  - listed in the receipt and the hash matches -> "verified"
+   *  - listed and the hash differs -> REFUSE. The file was swapped or damaged;
+   *    installing it could brick a station, so it never reaches the device.
+   *  - no receipt (folder built before receipts, or hand-filled) -> allowed,
+   *    but the fingerprint is printed so it can be compared by eye. */
+  async _verify(bytes, relPath, receipt) {
+    const hash = await Util.sha256Hex(bytes);
+    const want = receipt && receipt.files ? receipt.files[relPath] : null;
+    if (!want) {
+      Util.warn(relPath + ": fingerprint " + hash.slice(0, 16) +
+                " (no receipt in this folder - compare it yourself if in doubt)");
+      return hash;
+    }
+    if (want.toLowerCase() !== hash.toLowerCase()) {
+      Util.err("REFUSED " + relPath + ": this file is NOT the one delivered with this uploader.");
+      Util.err("   delivered: " + want.slice(0, 16) + "     found now: " + hash.slice(0, 16));
+      const e = new UploaderError(I18N.t("err.fpMismatch", { f: relPath }), I18N.t("hint.fpMismatch"));
+      e.fatal = true;
+      throw e;
+    }
+    Util.ok(relPath + ": verified - exactly the file delivered with this uploader (" +
+            hash.slice(0, 16) + ").");
+    return hash;
+  },
+
   async load(found, needs, mainName, onProgress) {
     const report = (name, f) => { if (onProgress) onProgress(name, f); };
     const pkg = { controller: null, system: null, esp: null };
+    const receipt = found.receipt;
 
     if (needs.controller) {
       const chosen = mainName || (found.mains[0] && found.mains[0].name);
@@ -117,6 +153,7 @@ const LocalSource = {
       }
       pkg.controller = await this._fetchBin(this._url(this.MAIN_DIR + "/" + chosen),
         "Controller software " + chosen, f => report(chosen, f));
+      await this._verify(pkg.controller, this.MAIN_DIR + "/" + chosen, receipt);
     }
 
     if (needs.system) {
@@ -125,6 +162,7 @@ const LocalSource = {
       }
       pkg.system = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.system),
         "System firmware " + found.system, f => report(found.system, f));
+      await this._verify(pkg.system, this.MAIN_DIR + "/" + found.system, receipt);
     }
 
     if (needs.esp !== "no") {
@@ -134,6 +172,7 @@ const LocalSource = {
           if (found.esp[part]) {
             pkg.esp[part] = await this._fetchBin(this._url(this.CLOUD_DIR + "/" + found.esp[part]),
               "ESP32 " + part, f => report("cloud/" + part, f));
+            await this._verify(pkg.esp[part], this.CLOUD_DIR + "/" + found.esp[part], receipt);
           }
         }
       } else if (needs.esp === "required") {

@@ -30,8 +30,8 @@ class ReleaseManager : Form
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh;
-    Label lblStatus;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck;
+    Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
 
     [STAThread]
@@ -111,7 +111,8 @@ class ReleaseManager : Form
         txtCtrl = new TextBox { Left = 178, Top = y, Width = 620 };
         Controls.Add(txtCtrl);
         Mk("...", 804, y - 1, 40, (s, e) => Browse(txtCtrl, "Controller software|*.bin"));
-        y += 30;
+        y += 24;
+        lblCtrlFp = FpLabel(y); y += 22;
 
         chkSystem = new CheckBox { Left = 24, Top = y + 2, Width = 154, Text = "System firmware", Checked = true };
         Controls.Add(chkSystem);
@@ -119,7 +120,8 @@ class ReleaseManager : Form
         Controls.Add(txtSys);
         Mk("...", 804, y - 1, 40, (s, e) => Browse(txtSys, "System firmware|*.bin"));
         chkSystem.CheckedChanged += (s, e) => txtSys.Enabled = chkSystem.Checked;
-        y += 30;
+        y += 24;
+        lblSysFp = FpLabel(y); y += 22;
 
         chkEsp = new CheckBox { Left = 24, Top = y + 2, Width = 154, Text = "Cloud module (ESP32)", Checked = true };
         Controls.Add(chkEsp);
@@ -127,7 +129,8 @@ class ReleaseManager : Form
         Controls.Add(txtEsp);
         Mk("...", 804, y - 1, 40, (s, e) => BrowseFolder(txtEsp));
         chkEsp.CheckedChanged += (s, e) => txtEsp.Enabled = chkEsp.Checked;
-        y += 34;
+        y += 24;
+        lblEspFp = FpLabel(y); y += 26;
 
         Controls.Add(new Label { Left = 24, Top = y + 3, Width = 150, Text = "What changed (notes)" });
         txtNotes = new TextBox { Left = 178, Top = y, Width = 666 };
@@ -145,9 +148,12 @@ class ReleaseManager : Form
         btnBuildFolder = Mk("BUILD CUSTOMER UPLOADER FOLDER", 244, y, 270, (s, e) => BuildFolder());
         btnBuildFolder.Height = 34;
 
-        btnBackup = Mk("Back up keys", 524, y, 120, (s, e) => BackupKeys());
+        btnCheck = Mk("CHECK A FOLDER", 524, y, 150, (s, e) => CheckFolder());
+        btnCheck.Height = 34;
+        btnCheck.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+        btnBackup = Mk("Back up keys", 684, y, 110, (s, e) => BackupKeys());
         btnBackup.Height = 34;
-        btnOpenGuide = Mk("Open guide", 654, y, 110, (s, e) => OpenGuide());
+        btnOpenGuide = Mk("Guide", 804, y, 70, (s, e) => OpenGuide());
         btnOpenGuide.Height = 34;
         y += 44;
 
@@ -171,6 +177,14 @@ class ReleaseManager : Form
 
         LoadCustomers();
         FillDefaultPaths();
+        RefreshFingerprints();
+        // keep the fingerprints honest whenever a path or tick changes
+        txtCtrl.TextChanged += (s, e) => lblCtrlFp.Text = FileFp(txtCtrl.Text);
+        txtSys.TextChanged += (s, e) => lblSysFp.Text = FileFp(txtSys.Text);
+        txtEsp.TextChanged += (s, e) => lblEspFp.Text = EspFp(txtEsp.Text);
+        chkSystem.CheckedChanged += (s, e) => RefreshFingerprints();
+        chkEsp.CheckedChanged += (s, e) => RefreshFingerprints();
+        Activated += (s, e) => RefreshFingerprints();   // a rebuild while the window was open
         Log("GATA Release Manager ready.");
         Log("App folder: " + AppDir);
         Log("Every action runs the documented PowerShell script - the exact command is printed here.");
@@ -186,6 +200,53 @@ class ReleaseManager : Form
         };
         Controls.Add(l);
         return y + 26;
+    }
+
+    /* The fingerprint line under each file box: WHICH .bin is this, exactly.
+     * The same value is written into the customer folder's receipt and shown
+     * by the updater before it installs - if the three match, it is the file
+     * you picked and nothing else. */
+    Label FpLabel(int y)
+    {
+        var l = new Label
+        {
+            Left = 178, Top = y, Width = 666, Height = 20,
+            Font = new Font("Consolas", 8.25F), ForeColor = Color.FromArgb(90, 110, 140)
+        };
+        Controls.Add(l);
+        return l;
+    }
+
+    void RefreshFingerprints()
+    {
+        lblCtrlFp.Text = FileFp(txtCtrl.Text);
+        lblSysFp.Text = chkSystem.Checked ? FileFp(txtSys.Text) : "(not included)";
+        lblEspFp.Text = chkEsp.Checked ? EspFp(txtEsp.Text) : "(not included)";
+    }
+
+    static string FileFp(string path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return "file not found";
+            var fi = new FileInfo(path);
+            return "fingerprint " + Sha256(path).Substring(0, 16) + "    " +
+                   string.Format("{0:N0} bytes    built {1:yyyy-MM-dd HH:mm}", fi.Length, fi.LastWriteTime);
+        }
+        catch (Exception ex) { return "could not read (" + ex.Message + ")"; }
+    }
+
+    static string EspFp(string dir)
+    {
+        try
+        {
+            string f = Path.Combine(dir ?? "", "firmware.bin");
+            if (!File.Exists(f)) return "firmware.bin not found in this folder";
+            var fi = new FileInfo(f);
+            return "firmware.bin " + Sha256(f).Substring(0, 16) + "    " +
+                   string.Format("{0:N0} bytes    built {1:yyyy-MM-dd HH:mm}", fi.Length, fi.LastWriteTime);
+        }
+        catch (Exception ex) { return "could not read (" + ex.Message + ")"; }
     }
 
     Button Mk(string text, int x, int y, int w, EventHandler onClick)
@@ -567,33 +628,172 @@ class ReleaseManager : Form
         string tag = DateTime.Now.ToString("dd_MM_yy") + "_" +
                      new string(company.Where(c => char.IsLetterOrDigit(c)).ToArray()) + "_" + board;
         int n = 0;
+        /* A RECEIPT of what went in: every file with its SHA-256, written next
+         * to the firmware. The app re-hashes the files it is about to install
+         * and compares them with this - so "is this really the firmware I put
+         * in?" is answered by arithmetic, not by trust. The copy is verified
+         * here too: a copy that did not land byte-for-byte is caught now. */
+        var receipt = new StringBuilder();
+        receipt.Append("{\n  \"company\": \"").Append(company).Append("\",\n");
+        receipt.Append("  \"board\": \"").Append(board).Append("\",\n");
+        receipt.Append("  \"built\": \"").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm")).Append("\",\n");
+        receipt.Append("  \"files\": {\n");
+        var lines = new List<string>();
+
+        Action<string, string, string> put = (srcPath, folder, destName) =>
+        {
+            string destPath = Path.Combine(Path.Combine(dest, folder), destName);
+            File.Copy(srcPath, destPath, true);
+            string srcHash = Sha256(srcPath), dstHash = Sha256(destPath);
+            if (srcHash != dstHash)
+            {
+                log("      !! COPY MISMATCH for " + destName + " - do not send this folder");
+                return;
+            }
+            lines.Add("    \"" + folder + "/" + destName + "\": \"" + dstHash + "\"");
+            log("      " + folder + "\\" + destName + "   [" + dstHash.Substring(0, 12) + "]");
+            n++;
+        };
 
         if (!string.IsNullOrEmpty(ctrlPath) && File.Exists(ctrlPath))
-        {
-            string name = "controller_" + tag + ".bin";
-            File.Copy(ctrlPath, Path.Combine(mainDir, name), true);
-            log("      main_firmware\\" + name);
-            n++;
-        }
+            put(ctrlPath, "main_firmware", "controller_" + tag + ".bin");
         if (!string.IsNullOrEmpty(sysPath) && File.Exists(sysPath))
-        {
-            string name = "system_" + tag + ".bin";
-            File.Copy(sysPath, Path.Combine(mainDir, name), true);
-            log("      main_firmware\\" + name);
-            n++;
-        }
+            put(sysPath, "main_firmware", "system_" + tag + ".bin");
         if (!string.IsNullOrEmpty(espDir) && Directory.Exists(espDir))
-        {
             foreach (string part in new[] { "bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin" })
             {
                 string src = Path.Combine(espDir, part);
                 if (!File.Exists(src)) { log("      ! missing ESP file: " + part); continue; }
-                File.Copy(src, Path.Combine(cloudDir, part), true);
-                log("      cloud_firmware\\" + part);
-                n++;
+                put(src, "cloud_firmware", part);
             }
+
+        receipt.Append(string.Join(",\n", lines.ToArray())).Append("\n  }\n}\n");
+        File.WriteAllText(Path.Combine(dest, "firmware_receipt.json"), receipt.ToString(), new UTF8Encoding(false));
+
+        /* The same thing in plain words, so it can be checked by opening a
+         * text file - no tools needed. */
+        var txt = new StringBuilder();
+        txt.AppendLine("GATA firmware delivery - what is inside this uploader");
+        txt.AppendLine("=====================================================");
+        txt.AppendLine("Company : " + company);
+        txt.AppendLine("Board   : " + board);
+        txt.AppendLine("Prepared: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
+        txt.AppendLine();
+        txt.AppendLine("These are the exact firmware files that were put in. The updater");
+        txt.AppendLine("re-checks every one of them before installing and REFUSES to install");
+        txt.AppendLine("a file whose fingerprint does not match this list.");
+        txt.AppendLine();
+        foreach (string l in lines)
+        {
+            string t = l.Trim().TrimStart('"');
+            int q = t.IndexOf("\": \"");
+            if (q < 0) continue;
+            txt.AppendLine("  " + t.Substring(0, q));
+            txt.AppendLine("      fingerprint " + t.Substring(q + 4).TrimEnd('"'));
         }
+        txt.AppendLine();
+        txt.AppendLine("Source files these came from (on the release PC):");
+        if (!string.IsNullOrEmpty(ctrlPath)) txt.AppendLine("  controller : " + ctrlPath);
+        if (!string.IsNullOrEmpty(sysPath)) txt.AppendLine("  system     : " + sysPath);
+        if (!string.IsNullOrEmpty(espDir)) txt.AppendLine("  cloud mod. : " + espDir);
+        File.WriteAllText(Path.Combine(dest, "FIRMWARE_INFO.txt"), txt.ToString(), new UTF8Encoding(false));
+
+        log("      firmware_receipt.json + FIRMWARE_INFO.txt  (the updater checks the files against these)");
         return n;
+    }
+
+    /* "Is the firmware I chose really the one in that folder?" - answered by
+     * re-hashing: the folder's files vs its receipt, AND vs the files
+     * currently selected in this window. */
+    void CheckFolder()
+    {
+        string dest;
+        using (var d = new FolderBrowserDialog { Description = "Pick the customer uploader folder to check" })
+        {
+            if (d.ShowDialog() != DialogResult.OK) return;
+            dest = d.SelectedPath;
+        }
+
+        Log("");
+        Log("=== Checking " + dest + " ===");
+        string rec = Path.Combine(dest, "firmware_receipt.json");
+        if (!File.Exists(rec))
+        {
+            Log("   !! no firmware_receipt.json - this folder was built by an older version.");
+            MessageBox.Show("This folder has no delivery receipt (built with an older version).\n\n" +
+                            "Build it again so its firmware can be checked.", "Cannot check",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string json = File.ReadAllText(rec);
+        var bad = new List<string>();
+        int checkedCount = 0;
+        foreach (string rawLine in json.Split('\n'))
+        {
+            string t = rawLine.Trim();
+            if (!t.StartsWith("\"main_firmware/") && !t.StartsWith("\"cloud_firmware/")) continue;
+            int q = t.IndexOf("\": \"");
+            if (q < 0) continue;
+            string rel = t.Substring(1, q - 1);
+            string want = t.Substring(q + 4).TrimEnd(',', '"', ' ');
+            string path = Path.Combine(dest, rel.Replace('/', '\\'));
+            if (!File.Exists(path)) { bad.Add(rel + " - MISSING"); continue; }
+            string got = Sha256(path);
+            checkedCount++;
+            if (!string.Equals(got, want, StringComparison.OrdinalIgnoreCase))
+                bad.Add(rel + " - CHANGED (" + got.Substring(0, 12) + " instead of " + want.Substring(0, 12) + ")");
+            else
+                Log("   ok  " + rel + "   [" + got.Substring(0, 12) + "]");
+        }
+
+        // ...and does it match what is selected in the window right now?
+        var differs = new List<string>();
+        Action<string, string> cmp = (srcPath, prefix) =>
+        {
+            if (string.IsNullOrEmpty(srcPath) || !File.Exists(srcPath)) return;
+            string want = Sha256(srcPath);
+            string dir = Path.Combine(dest, "main_firmware");
+            bool found = Directory.Exists(dir) && Directory.GetFiles(dir, prefix + "*.bin")
+                                                          .Any(f => Sha256(f) == want);
+            if (!found) differs.Add(prefix.TrimEnd('_') + " in the folder is NOT the file selected above");
+        };
+        cmp(txtCtrl.Text, "controller_");
+        if (chkSystem.Checked) cmp(txtSys.Text, "system_");
+        if (chkEsp.Checked && Directory.Exists(txtEsp.Text ?? ""))
+        {
+            string a = Path.Combine(txtEsp.Text, "firmware.bin");
+            string b = Path.Combine(dest, @"cloud_firmware\firmware.bin");
+            if (File.Exists(a) && File.Exists(b) && Sha256(a) != Sha256(b))
+                differs.Add("cloud module firmware.bin in the folder is NOT the file selected above");
+        }
+
+        foreach (string b in bad) Log("   !! " + b);
+        foreach (string d2 in differs) Log("   !! " + d2);
+
+        if (bad.Count == 0 && differs.Count == 0)
+        {
+            Log("=== VERIFIED: " + checkedCount + " file(s), all exactly as delivered and identical to the files selected above. ===");
+            Status("Folder verified - it contains exactly the firmware selected.");
+            MessageBox.Show("VERIFIED\n\n" + checkedCount + " firmware file(s) checked.\n\n" +
+                            "The folder contains exactly the firmware selected in this window,\n" +
+                            "unchanged since it was prepared.", "Folder is correct",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            Status("Folder check FAILED - see the log.");
+            MessageBox.Show("PROBLEM - do not send this folder:\n\n" +
+                            string.Join("\n", bad.Concat(differs).ToArray()),
+                            "Folder is NOT correct", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    static string Sha256(string path)
+    {
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        using (var fs = File.OpenRead(path))
+            return BitConverter.ToString(sha.ComputeHash(fs)).Replace("-", "").ToLowerInvariant();
     }
 
     /* The only tools\ scripts a customer's launcher calls. Everything else in

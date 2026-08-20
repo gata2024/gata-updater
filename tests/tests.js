@@ -206,6 +206,31 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* --------------------------------- firmware fingerprints (.bin identity) */
+    {
+      const bin = new Uint8Array([1, 2, 3, 4, 5]);
+      const good = await Util.sha256Hex(bin);
+      const receipt = { files: { "main_firmware/controller_x.bin": good } };
+      let okHash = await LocalSource._verify(bin, "main_firmware/controller_x.bin", receipt);
+      this.check("fingerprint: the delivered .bin is accepted", okHash === good);
+
+      let refused = null;
+      const swapped = new Uint8Array([9, 9, 9, 9, 9]);
+      try { await LocalSource._verify(swapped, "main_firmware/controller_x.bin", receipt); }
+      catch (e) { refused = e; }
+      this.check("fingerprint: a SWAPPED .bin is refused and the refusal is fatal",
+        !!refused && refused.fatal === true);
+
+      let noReceipt = await LocalSource._verify(bin, "main_firmware/controller_x.bin", null);
+      this.check("fingerprint: a folder without a receipt still works (hash reported, not enforced)",
+        noReceipt === good);
+
+      const lsrc2 = await (await fetch("../js/localsource.js", { cache: "no-store" })).text();
+      this.check("fingerprint: every local .bin is verified before it can be installed",
+        (lsrc2.match(/await this\._verify\(/g) || []).length >= 3 &&
+        /firmware_receipt\.json/.test(lsrc2));
+    }
+
     /* ------------------------------------------------- manifest signing */
     {
       const pair = await crypto.subtle.generateKey(

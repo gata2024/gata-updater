@@ -89,6 +89,10 @@ const I18N = {
 
       "lic.title": "License",
       "lic.enterHint": "No license found. The license file normally comes inside the uploader folder (gata.license) — if you received it separately, open it here. It decides which software this updater installs. One time only — it stays on this device.",
+      "local.receipt": "Delivery receipt",
+      "local.receiptFor": "prepared for {c} on {d} — the fingerprints below must match, or the file is refused",
+      "err.fpMismatch": "{f} is NOT the firmware delivered with this uploader — installation refused.",
+      "hint.fpMismatch": "The file was replaced or damaged after this uploader was prepared. Use the original folder you received, or ask GATA for a fresh copy. Never install firmware that fails this check.",
       "lic.open": "Open license file…",
       "lic.licensedTo": "Licensed to",
       "lic.change": "Change license",
@@ -305,6 +309,10 @@ const I18N = {
 
       "lic.title": "الترخيص",
       "lic.enterHint": "لم يتم العثور على ترخيص. عادةً يأتي ملف الترخيص داخل مجلد المحدّث (gata.license) — إذا استلمته منفصلًا فافتحه هنا. هو الذي يحدد أي برنامج يثبّته هذا المحدّث. مرة واحدة فقط — يبقى على هذا الجهاز.",
+      "local.receipt": "إيصال التسليم",
+      "local.receiptFor": "أُعدّ لـ {c} بتاريخ {d} — يجب أن تتطابق البصمات أدناه وإلا يُرفض الملف",
+      "err.fpMismatch": "{f} ليس البرنامج المسلَّم مع هذا المحدّث — تم رفض التثبيت.",
+      "hint.fpMismatch": "تم استبدال الملف أو تلفه بعد إعداد هذا المحدّث. استخدم المجلد الأصلي الذي استلمته، أو اطلب نسخة جديدة من GATA. لا تثبّت أبدًا برنامجًا يفشل في هذا الفحص.",
       "lic.open": "فتح ملف الترخيص…",
       "lic.licensedTo": "مرخّص لـ",
       "lic.change": "تغيير الترخيص",
@@ -521,6 +529,10 @@ const I18N = {
 
       "lic.title": "Lisans",
       "lic.enterHint": "Lisans bulunamadı. Lisans dosyası normalde güncelleyici klasörünün içinde gelir (gata.license) — ayrı aldıysanız buradan açın. Bu güncelleyicinin hangi yazılımı kuracağına lisans karar verir. Yalnızca bir kez — bu cihazda kalır.",
+      "local.receipt": "Teslim makbuzu",
+      "local.receiptFor": "{c} için {d} tarihinde hazırlandı — aşağıdaki parmak izleri eşleşmelidir, aksi halde dosya reddedilir",
+      "err.fpMismatch": "{f} bu güncelleyiciyle teslim edilen yazılım DEĞİL — kurulum reddedildi.",
+      "hint.fpMismatch": "Dosya, bu güncelleyici hazırlandıktan sonra değiştirilmiş veya bozulmuş. Aldığınız orijinal klasörü kullanın veya GATA'dan yeni bir kopya isteyin. Bu kontrolü geçemeyen yazılımı asla kurmayın.",
       "lic.open": "Lisans dosyasını aç…",
       "lic.licensedTo": "Lisans sahibi",
       "lic.change": "Lisansı değiştir",
