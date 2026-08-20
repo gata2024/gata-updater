@@ -54,6 +54,13 @@ const App = {
     /* License first: it decides the firmware channel, so the manifest can
      * only be loaded after it. Without one, the app shows the license card
      * and waits - nothing else works until a valid license is entered. */
+    /* Phone/hosted app: no uploader folder exists, so hide that source. */
+    if (!this.canUseLocal()) {
+      const b = this.$("btnUseLocal");
+      if (b) b.classList.add("hidden");
+      this.localMode = false;
+    }
+
     await License.loadStored();
     this.renderLicense();
     if (License.licensed()) {
@@ -76,8 +83,13 @@ const App = {
     badge.classList.toggle("hidden", !lic);
     if (lic) {
       badge.textContent = lic.customer;
+      /* Tapping it swaps the license. On a phone there is no Settings dialog
+       * in reach mid-job, and the app auto-licenses itself from the file that
+       * ships with the site - without this a technician from another company
+       * would have no obvious way to load their own license. */
       badge.title = I18N.t("lic.licensedTo") + " " + lic.customer + " (" + lic.channel + ")" +
-                    (lic.exp ? " " + I18N.t("lic.until", { d: lic.exp }) : "");
+                    (lic.exp ? " " + I18N.t("lic.until", { d: lic.exp }) : "") +
+                    " — " + I18N.t("lic.change");
       this.$("licWho").textContent = lic.customer + " (" + lic.channel + ")";
       this.$("licExp").textContent = lic.exp ? I18N.t("lic.until", { d: lic.exp }) : "";
     }
@@ -105,6 +117,17 @@ const App = {
     Util.err(I18N.t("lic.needed"));
     this.$("licenseCard").scrollIntoView({ behavior: "smooth", block: "center" });
     return false;
+  },
+
+  /* The "files in the uploader folder" source only exists when the app is
+   * served BY that folder - the little local server started by
+   * CLICK_ME_START_ON_PC.bat / GATA_Updater.exe, which answers __local_list.
+   * The phone app (and the hosted web app) load the site from the internet:
+   * there is no uploader folder there, so the button would open an empty list
+   * and look broken. Offer it only where it can actually work. */
+  canUseLocal() {
+    if (location.protocol === "file:") return true;
+    return /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
   },
 
   demo() { return localStorage.getItem("gata.demo") === "1"; },
@@ -759,6 +782,7 @@ const App = {
     };
 
     this.$("btnLicOpen").onclick = () => this.$("licFile").click();
+    this.$("licBadge").onclick = () => this.$("licFile").click();   // change it from anywhere
     this.$("licFile").onchange = e => {
       if (e.target.files && e.target.files[0]) this.onLicFile(e.target.files[0]);
       e.target.value = "";

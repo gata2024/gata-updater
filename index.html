@@ -47,7 +47,11 @@
     </div>
     <div id="licEnter">
       <p class="muted" data-i18n="lic.enterHint">No license found. The license file normally comes inside the uploader folder (gata.license) — if you received it separately, open it here. It decides which software this updater installs. One time only — it stays on this device.</p>
-      <input type="file" id="licFile" accept=".license,.lic,.txt,.gata" hidden>
+      <!-- no accept filter on purpose: Android file pickers grey out extensions
+           they do not recognise (.license/.gata), which made the file
+           impossible to choose on a phone. The token inside is verified
+           anyway, so anything the user picks is checked properly. -->
+      <input type="file" id="licFile" hidden>
       <div class="row gap">
         <button id="btnLicOpen" class="btn prime" data-i18n="lic.open">Open license file…</button>
       </div>

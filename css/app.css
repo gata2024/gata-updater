@@ -302,7 +302,7 @@ details.picky[open] > summary { margin-bottom: 8px; }
 
 /* Board revision selector (rev 5 / rev 6). */
 .boardrow { align-items: center; margin-bottom: 10px; }
-.licbadge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+.licbadge { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
   border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-weight: 700;
   font-size: 13px; letter-spacing: .2px; white-space: nowrap; }
 .licbadge::before { content: "🔑"; font-size: 12px; }

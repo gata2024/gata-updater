@@ -247,6 +247,25 @@ const T = {
         /always goes in: the updater needs it/.test(rmsrc) &&
         /MISSING: main_firmware\\\\system\*\.bin/.test(rmsrc));
 
+      /* the phone app (and hosted web app) has no uploader folder */
+      const appsrc = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      this.check("phone: the 'files in this folder' source is offered only where a local server serves it",
+        /canUseLocal\(\)/.test(appsrc) && /127\\\.0\\\.0\\\.1\|localhost/.test(appsrc) &&
+        /btnUseLocal.*classList\.add\("hidden"\)|if \(b\) b\.classList\.add\("hidden"\)/.test(appsrc));
+      /* app.js is not loaded here (it drives the real UI), so exercise the same
+       * rule directly: only a locally served copy may offer the folder. */
+      const localRule = (h, proto) =>
+        proto === "file:" ? true : /^(127\.0\.0\.1|localhost|\[::1\])$/.test(h);
+      this.check("phone: 127.0.0.1 may use the uploader folder, gata2024.github.io may not",
+        localRule("127.0.0.1", "http:") === true &&
+        localRule("localhost", "http:") === true &&
+        localRule("gata2024.github.io", "https:") === false);
+      this.check("phone: the licence can be changed by tapping the badge (no Settings dialog needed)",
+        /licBadge"\)\.onclick/.test(appsrc));
+      const idx = await (await fetch("../index.html", { cache: "no-store" })).text();
+      this.check("phone: the licence file input has no extension filter (Android greys those out)",
+        /<input type="file" id="licFile" hidden>/.test(idx));
+
       const asrc2 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       this.check("no-esp: a delivery prepared without a cloud module reads 'not included', not 'missing'",
         /espDeliberatelyNone/.test(asrc2) && /local\.espNotIncluded/.test(asrc2) &&
