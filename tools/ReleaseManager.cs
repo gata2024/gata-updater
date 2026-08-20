@@ -85,8 +85,7 @@ class ReleaseManager : Form
     public ReleaseManager()
     {
         Text = "GATA Release Manager";
-        Size = new Size(940, 940);
-        MinimumSize = new Size(840, 800);
+        ClientSize = new Size(940, 700);   // height is recomputed from the content below
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(246, 248, 252);
         Font = new Font("Segoe UI", 9F);
@@ -182,7 +181,7 @@ class ReleaseManager : Form
         y = Section("5.  In the cloud for this company right now", y);
         lstCloud = new ListView
         {
-            Left = 24, Top = y, Width = 700, Height = 150, View = View.Details,
+            Left = 24, Top = y, Width = 700, Height = 120, View = View.Details,
             FullRowSelect = true, MultiSelect = false, HideSelection = false,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
@@ -202,7 +201,7 @@ class ReleaseManager : Form
         btnRefreshCloud = Mk(ClientSize.Width - 164, y + 36, 140, "Refresh", (s, e) => LoadCloudList());
         btnRefreshCloud.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         lstCloud.Width = ClientSize.Width - 24 - 164 - 10;
-        y += 160;
+        y += 130;
 
         bar = new ProgressBar { Left = 24, Top = y, Width = 820, Height = 6, Style = ProgressBarStyle.Marquee, Visible = false };
         Controls.Add(bar);
@@ -212,15 +211,27 @@ class ReleaseManager : Form
         Controls.Add(lblStatus);
         y += 22;
 
+        const int LOG_H = 230, MARGIN = 14;
         txtLog = new TextBox
         {
-            Left = 24, Top = y, Width = 866, Height = 250,
-            Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true,
+            Left = 24, Top = y, Width = ClientSize.Width - 48, Height = LOG_H,
+            Multiline = true, ScrollBars = ScrollBars.Both, WordWrap = false, ReadOnly = true,
             BackColor = Color.FromArgb(24, 30, 44), ForeColor = Color.FromArgb(210, 222, 240),
             Font = new Font("Consolas", 8.75F),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
         };
         Controls.Add(txtLog);
+
+        /* Size the window from what is actually in it. The height used to be a
+         * fixed number chosen for an earlier layout - every section added since
+         * pushed the log off the bottom of the screen. The minimum keeps ~90 px
+         * of log visible, so it can never be squeezed away again. */
+        ClientSize = new Size(ClientSize.Width, y + LOG_H + MARGIN);
+        MinimumSize = new Size(880, Height - LOG_H + 90 + MARGIN);
+        /* Never open taller than the screen it is on. */
+        var wa = Screen.FromControl(this).WorkingArea;
+        if (Height > wa.Height) Height = wa.Height;
+        if (Width > wa.Width) Width = wa.Width;
 
         LoadCustomers();
         FillDefaultPaths();
