@@ -70,8 +70,15 @@ const App = {
     this.$("licenseCard").classList.toggle("hidden", !!lic);
     const line = this.$("licLine");
     line.classList.toggle("hidden", !lic);
+    /* The company this copy belongs to is worth seeing at a glance - a badge
+     * in the header, not a card in the way. */
+    const badge = this.$("licBadge");
+    badge.classList.toggle("hidden", !lic);
     if (lic) {
-      this.$("licWho").textContent = lic.customer;
+      badge.textContent = lic.customer;
+      badge.title = I18N.t("lic.licensedTo") + " " + lic.customer + " (" + lic.channel + ")" +
+                    (lic.exp ? " " + I18N.t("lic.until", { d: lic.exp }) : "");
+      this.$("licWho").textContent = lic.customer + " (" + lic.channel + ")";
       this.$("licExp").textContent = lic.exp ? I18N.t("lic.until", { d: lic.exp }) : "";
     }
   },

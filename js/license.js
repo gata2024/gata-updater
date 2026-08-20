@@ -21,6 +21,7 @@
 
 const License = {
   KEY: "gata.license",
+  MANUAL_KEY: "gata.licenseManual",   // the user opened a license file by hand
   _info: null,          // verified payload, or null
 
   _b64uToBytes(s) {
@@ -92,10 +93,13 @@ const License = {
     return p;
   },
 
-  /* Verify + store. Returns the payload; throws on a bad token. */
+  /* Verify + store a license the USER opened. Returns the payload; throws on
+   * a bad token. Marked manual so it is not overridden by the folder's own
+   * file on the next start. */
   async activate(token) {
     const payload = await this.verify(token);
     localStorage.setItem(this.KEY, String(token).trim());
+    localStorage.setItem(this.MANUAL_KEY, "1");
     this._info = payload;
     Util.ok("License activated: " + payload.customer + " (channel " + payload.channel + ").");
     return payload;
@@ -113,6 +117,19 @@ const License = {
                      channel: APP_CONFIG.channel, legacy: true };
       return this._info;
     }
+
+    /* THE FOLDER WINS. Every uploader folder runs on the same local address,
+     * so the browser shares one storage between them: a licence remembered
+     * from another company's folder would otherwise stick and the app would
+     * announce the wrong customer. The license file shipped WITH this folder
+     * is the authority - unless the user deliberately opened a different
+     * license file on this device (then their choice is kept). */
+    const manual = localStorage.getItem(this.MANUAL_KEY) === "1";
+    if (!manual) {
+      const bundled = await this.loadBundled();
+      if (bundled) return bundled;
+    }
+
     const token = localStorage.getItem(this.KEY);
     if (token) {
       try {
@@ -123,7 +140,7 @@ const License = {
         localStorage.removeItem(this.KEY);
       }
     }
-    return await this.loadBundled();
+    return manual ? await this.loadBundled() : null;
   },
 
   /* The license file shipped inside the uploader folder (next to index.html).
@@ -139,7 +156,8 @@ const License = {
     if (!text || !text.startsWith("GATA1.")) return null;
     try {
       this._info = await this.verify(text);
-      localStorage.setItem(this.KEY, text);   // works offline from now on
+      localStorage.setItem(this.KEY, text);       // works offline from now on
+      localStorage.removeItem(this.MANUAL_KEY);   // this came from the folder
       Util.ok("License file found with the uploader: " + this._info.customer +
               " (channel " + this._info.channel + ").");
     } catch (e) {
@@ -151,6 +169,7 @@ const License = {
 
   clear() {
     localStorage.removeItem(this.KEY);
+    localStorage.removeItem(this.MANUAL_KEY);
     this._info = null;
   },
 

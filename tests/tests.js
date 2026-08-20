@@ -170,6 +170,9 @@ const T = {
       const hsrc = await (await fetch("../index.html", { cache: "no-store" })).text();
       this.check("license-file: the UI offers 'Open license file' (no pasted codes)",
         /id="licFile"/.test(hsrc) && /btnLicOpen/.test(hsrc) && !/licInput/.test(hsrc));
+      this.check("license-file: the FOLDER's license wins over one remembered from another folder",
+        /MANUAL_KEY/.test(lsrc) && /const manual = localStorage\.getItem\(this\.MANUAL_KEY\)/.test(lsrc) &&
+        /if \(!manual\)/.test(lsrc));
       const bundled = await (await fetch("../gata.license", { cache: "no-store" })).text();
       const bp = await License.verify(bundled.trim());
       this.check("license-file: the license bundled with THIS uploader verifies against the pinned key",
