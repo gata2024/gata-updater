@@ -305,12 +305,16 @@ const App = {
       return div;
     };
 
-    /* The receipt written when this folder was built. Showing its fingerprints
-     * lets you check at a glance that these are the exact .bin files that were
-     * put in - and the app refuses to install anything that disagrees. */
-    const fp = (rel) => {
-      const h = f.receipt && f.receipt.files ? f.receipt.files[rel] : null;
-      return h ? "   ·   " + h.slice(0, 16) : "";
+    /* What matters when looking at a file: how big it is and WHEN it was
+     * built. (The checksum that blocks a swapped file is checked silently at
+     * install time - no need to read hashes here.) */
+    const det = (name, rel) => {
+      const size = f.sizeOf ? f.sizeOf[name] : 0;
+      const when = f.builtAt ? f.builtAt(rel) : null;
+      let s = name;
+      if (size) s += "  (" + Util.fmtBytes(size) + ")";
+      if (when) s += "   ·   " + I18N.t("local.builtAt", { d: when });
+      return s;
     };
     if (f.receipt) {
       const b = document.createElement("div");
@@ -322,7 +326,8 @@ const App = {
 
     // System firmware pair
     row(!!f.system, I18N.t("local.sys"),
-      f.system ? f.system + fp("main_firmware/" + f.system) : I18N.t("local.missing") + " (system*.bin)");
+      f.system ? det(f.system, "main_firmware/" + f.system)
+               : I18N.t("local.missing") + " (system*.bin)");
 
     // Controller software (radio choice when several M*.bin exist)
     if (!f.mains.length) {
@@ -331,8 +336,7 @@ const App = {
     } else if (f.mains.length === 1) {
       this.localMainSel = f.mains[0].name;
       row(true, I18N.t("local.main"),
-        f.mains[0].name + (f.mains[0].size ? " (" + Util.fmtBytes(f.mains[0].size) + ")" : "") +
-        fp("main_firmware/" + f.mains[0].name));
+        det(f.mains[0].name, "main_firmware/" + f.mains[0].name));
     } else {
       if (!this.localMainSel || !f.mains.some(m => m.name === this.localMainSel)) {
         this.localMainSel = f.mains[0].name;
@@ -353,9 +357,15 @@ const App = {
     }
 
     // ESP32 files
-    const espDetail = f.espComplete ? I18N.t("local.espComplete")
+    let espDetail = f.espComplete ? I18N.t("local.espComplete")
       : (f.esp.firmware ? I18N.t("local.espFwOnly")
       : I18N.t("local.missing") + " (cloud_firmware) — " + I18N.t("opt"));
+    if (f.esp.firmware) {
+      const espSize = f.sizeOf ? f.sizeOf[f.esp.firmware] : 0;
+      const espWhen = f.builtAt ? f.builtAt("cloud_firmware/" + f.esp.firmware) : null;
+      if (espSize) espDetail += "  (" + Util.fmtBytes(espSize) + ")";
+      if (espWhen) espDetail += "   ·   " + I18N.t("local.builtAt", { d: espWhen });
+    }
     row(!!f.esp.firmware, I18N.t("local.esp"), espDetail);
 
     // The listing endpoint only exists in the current serve.ps1 - if we had

@@ -83,6 +83,7 @@ const LocalSource = {
     const m = this.matchNames(mainEntries.map(e => e.name), cloudEntries.map(e => e.name));
     const sizeOf = {};
     for (const e of mainEntries) sizeOf[e.name] = e.size;
+    for (const e of cloudEntries) sizeOf[e.name] = e.size;
     const found = {
       viaListing,
       system: m.system,
@@ -90,6 +91,10 @@ const LocalSource = {
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
       receipt,
+      sizeOf,
+      /* When each firmware was BUILT (the compiler's timestamp, recorded when
+       * this uploader was prepared) - the useful thing to look at. */
+      builtAt: (rel) => (receipt && receipt.built_times) ? receipt.built_times[rel] : null,
     };
     Util.info("Local folder scan (" + (viaListing ? "listing" : "name probe") + "): " +
       "system=" + (found.system || "none") +

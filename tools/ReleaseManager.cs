@@ -202,10 +202,10 @@ class ReleaseManager : Form
         return y + 26;
     }
 
-    /* The fingerprint line under each file box: WHICH .bin is this, exactly.
-     * The same value is written into the customer folder's receipt and shown
-     * by the updater before it installs - if the three match, it is the file
-     * you picked and nothing else. */
+    /* The line under each file box: WHEN this .bin was last built/modified,
+     * so it is obvious at a glance whether it is the build you meant. (The
+     * checksum that actually blocks a wrong file is kept out of sight, in the
+     * folder's firmware_receipt.json.) */
     Label FpLabel(int y)
     {
         var l = new Label
@@ -230,8 +230,8 @@ class ReleaseManager : Form
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return "file not found";
             var fi = new FileInfo(path);
-            return "fingerprint " + Sha256(path).Substring(0, 16) + "    " +
-                   string.Format("{0:N0} bytes    built {1:yyyy-MM-dd HH:mm}", fi.Length, fi.LastWriteTime);
+            return string.Format("last modified {0:dddd d MMMM yyyy  HH:mm}      {1:N0} bytes",
+                                 fi.LastWriteTime, fi.Length);
         }
         catch (Exception ex) { return "could not read (" + ex.Message + ")"; }
     }
@@ -243,8 +243,8 @@ class ReleaseManager : Form
             string f = Path.Combine(dir ?? "", "firmware.bin");
             if (!File.Exists(f)) return "firmware.bin not found in this folder";
             var fi = new FileInfo(f);
-            return "firmware.bin " + Sha256(f).Substring(0, 16) + "    " +
-                   string.Format("{0:N0} bytes    built {1:yyyy-MM-dd HH:mm}", fi.Length, fi.LastWriteTime);
+            return string.Format("firmware.bin last modified {0:dddd d MMMM yyyy  HH:mm}      {1:N0} bytes",
+                                 fi.LastWriteTime, fi.Length);
         }
         catch (Exception ex) { return "could not read (" + ex.Message + ")"; }
     }
