@@ -29,9 +29,10 @@ class ReleaseManager : Form
     // ---- controls ---------------------------------------------------------
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
-    TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog;
+    TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog, txtDest;
     Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud;
     ListView lstCloud;
+    string lastBuiltFolder;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
 
@@ -136,7 +137,16 @@ class ReleaseManager : Form
         Controls.Add(new Label { Left = 24, Top = y + 3, Width = 150, Text = "What changed (notes)" });
         txtNotes = new TextBox { Left = 178, Top = y, Width = 666 };
         Controls.Add(txtNotes);
-        y += 38;
+        y += 30;
+
+        /* Where customer folders are created. A plain box you can paste into -
+         * digging through a folder tree for a path you already know is slow.
+         * The last one used comes back next time. */
+        Controls.Add(new Label { Left = 24, Top = y + 3, Width = 150, Text = "Put customer folders in" });
+        txtDest = new TextBox { Left = 178, Top = y, Width = 620, Text = LoadDestPath() };
+        Controls.Add(txtDest);
+        Mk("...", 804, y - 1, 40, (s, e) => BrowseFolder(txtDest));
+        y += 34;
 
         // ---------------- 4. actions ----------------
         y = Section("4.  Go", y);
@@ -412,6 +422,49 @@ class ReleaseManager : Form
         }
     }
 
+    /* Remembered in the user profile, never inside the app folder - a stray
+     * settings file would otherwise be copied into customer folders. */
+    static string DestFile()
+    {
+        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GATA");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "release_manager_dest.txt");
+    }
+
+    static string LoadDestPath()
+    {
+        try { if (File.Exists(DestFile())) return File.ReadAllText(DestFile()).Trim(); } catch { }
+        return @"D:\";
+    }
+
+    static void SaveDestPath(string p)
+    {
+        try { File.WriteAllText(DestFile(), p); } catch { }
+    }
+
+    /* A path box with a Browse button - so a path can be pasted instead of
+     * clicked through. Returns null when cancelled. */
+    static string PromptPath(string title, string label, string preset)
+    {
+        using (var f = new Form { Text = title, Size = new Size(660, 190), StartPosition = FormStartPosition.CenterParent,
+                                  FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false })
+        {
+            var l = new Label { Left = 16, Top = 16, Width = 610, Height = 34, Text = label };
+            var t = new TextBox { Left = 16, Top = 56, Width = 510, Text = preset ?? "" };
+            var br = new Button { Text = "Browse...", Left = 534, Top = 55, Width = 92 };
+            br.Click += (s, e) =>
+            {
+                using (var d = new FolderBrowserDialog { SelectedPath = Directory.Exists(t.Text) ? t.Text : @"D:\" })
+                    if (d.ShowDialog() == DialogResult.OK) t.Text = d.SelectedPath;
+            };
+            var ok = new Button { Text = "OK", Left = 442, Top = 104, Width = 84, DialogResult = DialogResult.OK };
+            var no = new Button { Text = "Cancel", Left = 534, Top = 104, Width = 92, DialogResult = DialogResult.Cancel };
+            f.Controls.AddRange(new Control[] { l, t, br, ok, no });
+            f.AcceptButton = ok; f.CancelButton = no;
+            return f.ShowDialog() == DialogResult.OK ? t.Text.Trim().Trim('"') : null;
+        }
+    }
+
     void BrowseFolder(TextBox target)
     {
         using (var d = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : AppDir })
@@ -590,16 +643,25 @@ class ReleaseManager : Form
             return;
         }
 
-        string parent;
-        using (var d = new FolderBrowserDialog
+        string parent = (txtDest.Text ?? "").Trim().Trim('"');
+        if (parent.Length == 0)
         {
-            Description = "Where should the " + who + " uploader folder" + (boards.Count > 1 ? "s" : "") + " be created?",
-            SelectedPath = @"D:\"
-        })
-        {
-            if (d.ShowDialog() != DialogResult.OK) return;
-            parent = d.SelectedPath;
+            MessageBox.Show("Type or paste the folder where the customer folder should be created\n" +
+                            "(the \"Put customer folders in\" box above).", "Where to?");
+            txtDest.Focus();
+            return;
         }
+        try
+        {
+            if (!Directory.Exists(parent)) Directory.CreateDirectory(parent);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Cannot use that folder:\n\n" + parent + "\n\n" + ex.Message, "Where to?");
+            txtDest.Focus();
+            return;
+        }
+        SaveDestPath(parent);
 
         Busy(true);
         new Thread(() =>
@@ -618,7 +680,7 @@ class ReleaseManager : Form
                         chkEsp.Checked ? txtEsp.Text : null,
                         Log);
                     if (problems.Count > 0) allProblems.AddRange(problems);
-                    else made.Add(dest);
+                    else { made.Add(dest); lastBuiltFolder = dest; }
                 }
                 if (allProblems.Count > 0)
                 {
@@ -869,11 +931,14 @@ class ReleaseManager : Form
      * currently selected in this window. */
     void CheckFolder()
     {
-        string dest;
-        using (var d = new FolderBrowserDialog { Description = "Pick the customer uploader folder to check" })
+        string dest = PromptPath("Check a folder",
+            "Paste (or browse to) the customer uploader folder to check:",
+            lastBuiltFolder ?? LoadDestPath());
+        if (string.IsNullOrEmpty(dest)) return;
+        if (!Directory.Exists(dest))
         {
-            if (d.ShowDialog() != DialogResult.OK) return;
-            dest = d.SelectedPath;
+            MessageBox.Show("That folder does not exist:\n\n" + dest, "Check a folder");
+            return;
         }
 
         Log("");
