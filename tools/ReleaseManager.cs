@@ -30,7 +30,8 @@ class ReleaseManager : Form
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove;
+    ListView lstCloud;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
 
@@ -81,8 +82,8 @@ class ReleaseManager : Form
     public ReleaseManager()
     {
         Text = "GATA Release Manager";
-        Size = new Size(940, 760);
-        MinimumSize = new Size(840, 640);
+        Size = new Size(940, 940);
+        MinimumSize = new Size(840, 800);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(246, 248, 252);
         Font = new Font("Segoe UI", 9F);
@@ -157,6 +158,27 @@ class ReleaseManager : Form
         btnOpenGuide.Height = 34;
         y += 44;
 
+        // ---------------- 5. what is in the cloud right now ----------------
+        y = Section("5.  In the cloud for this company right now", y);
+        lstCloud = new ListView
+        {
+            Left = 24, Top = y, Width = 700, Height = 150, View = View.Details,
+            FullRowSelect = true, MultiSelect = false, HideSelection = false,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+        lstCloud.Columns.Add("Version", 260);
+        lstCloud.Columns.Add("Board", 60);
+        lstCloud.Columns.Add("Date", 90);
+        lstCloud.Columns.Add("", 40);           // "now" marker for the latest
+        lstCloud.Columns.Add("Notes", 240);
+        Controls.Add(lstCloud);
+
+        btnRemove = Mk("Remove selected", 734, y, 140, (s, e) => RemoveSelected());
+        btnRemove.Height = 30;
+        btnRemove.ForeColor = Color.FromArgb(170, 30, 30);
+        Mk("Refresh", 734, y + 36, 140, (s, e) => LoadCloudList());
+        y += 160;
+
         bar = new ProgressBar { Left = 24, Top = y, Width = 820, Height = 6, Style = ProgressBarStyle.Marquee, Visible = false };
         Controls.Add(bar);
         y += 12;
@@ -178,6 +200,9 @@ class ReleaseManager : Form
         LoadCustomers();
         FillDefaultPaths();
         RefreshFingerprints();
+        LoadCloudList();
+        cboCustomer.SelectedIndexChanged += (s, e) => LoadCloudList();
+
         // keep the fingerprints honest whenever a path or tick changes
         txtCtrl.TextChanged += (s, e) => lblCtrlFp.Text = FileFp(txtCtrl.Text);
         txtSys.TextChanged += (s, e) => lblSysFp.Text = FileFp(txtSys.Text);
@@ -215,6 +240,115 @@ class ReleaseManager : Form
         };
         Controls.Add(l);
         return l;
+    }
+
+    /* What this company can actually download right now, read from their
+     * signed channel manifest. */
+    void LoadCloudList()
+    {
+        if (lstCloud == null) return;
+        lstCloud.Items.Clear();
+        string channel = SelectedChannel();
+        string manPath = channel == "default"
+            ? Path.Combine(FirmwareDir, "manifest.json")
+            : Path.Combine(FirmwareDir, "customers", channel, "manifest.json");
+        if (!File.Exists(manPath))
+        {
+            lstCloud.Items.Add(new ListViewItem(new[] { "(no firmware published yet)", "", "", "", "" }));
+            return;
+        }
+        try
+        {
+            string json = File.ReadAllText(manPath);
+            foreach (string block in VersionBlocks(json))
+            {
+                string ver = ValueOf(block, "version");
+                if (ver == null) continue;
+                string board = ValueOf(block, "board"); if (string.IsNullOrEmpty(board)) board = "rev5";
+                string date = ValueOf(block, "date") ?? "";
+                string notes = ValueOf(block, "notes") ?? "";
+                bool latest = block.Replace(" ", "").Contains("\"latest\":true");
+                var it = new ListViewItem(new[] { ver, board, date, latest ? "NOW" : "", notes });
+                if (latest) it.Font = new Font(lstCloud.Font, FontStyle.Bold);
+                lstCloud.Items.Add(it);
+            }
+            if (lstCloud.Items.Count > 0) lstCloud.Items[0].Selected = true;
+        }
+        catch (Exception ex) { Log("Could not read the channel list: " + ex.Message); }
+    }
+
+    static IEnumerable<string> VersionBlocks(string json)
+    {
+        int v = json.IndexOf("\"versions\"");
+        if (v < 0) yield break;
+        int i = json.IndexOf('[', v);
+        if (i < 0) yield break;
+        while (true)
+        {
+            int start = json.IndexOf('{', i);
+            if (start < 0) yield break;
+            int depth = 0, end = -1;
+            for (int k = start; k < json.Length; k++)
+            {
+                if (json[k] == '{') depth++;
+                else if (json[k] == '}') { depth--; if (depth == 0) { end = k; break; } }
+            }
+            if (end < 0) yield break;
+            yield return json.Substring(start, end - start + 1);
+            i = end + 1;
+        }
+    }
+
+    static string ValueOf(string block, string key)
+    {
+        int k = block.IndexOf("\"" + key + "\"");
+        if (k < 0) return null;
+        int c = block.IndexOf(':', k);
+        if (c < 0) return null;
+        int q1 = block.IndexOf('"', c + 1);
+        if (q1 < 0) return null;
+        int q2 = q1 + 1;
+        while (q2 < block.Length && !(block[q2] == '"' && block[q2 - 1] != '\\')) q2++;
+        return block.Substring(q1 + 1, q2 - q1 - 1);
+    }
+
+    /* Take a release out of a company's cloud list. The files it alone used
+     * are deleted too, the manifest is re-signed and pushed - all by
+     * tools\remove_version.ps1, so it behaves exactly like publishing. */
+    void RemoveSelected()
+    {
+        if (lstCloud.SelectedItems.Count == 0)
+        {
+            MessageBox.Show("Pick the version to remove from the list.", "Nothing selected");
+            return;
+        }
+        string ver = lstCloud.SelectedItems[0].SubItems[0].Text;
+        if (ver.StartsWith("(")) return;
+        string channel = SelectedChannel();
+        string who = channel == "default" ? "General" : Pretty(channel);
+
+        if (MessageBox.Show("Remove " + ver + " from " + who + "?\n\n" +
+                            "It disappears from their updater and its files are deleted.\n" +
+                            "Controllers already updated are NOT affected.",
+                            "Remove version", MessageBoxButtons.OKCancel,
+                            MessageBoxIcon.Warning) != DialogResult.OK) return;
+
+        Busy(true);
+        new Thread(() =>
+        {
+            try
+            {
+                Status("Removing " + ver + "...");
+                var a = new StringBuilder();
+                a.Append("-Version ").Append(Q(ver));
+                if (channel != "default") a.Append(" -Customer ").Append(channel);
+                int rc = RunPs("remove_version.ps1", a.ToString());
+                Status(rc == 0 ? ver + " removed." : "Remove failed - see the log.");
+                BeginInvoke((Action)LoadCloudList);
+            }
+            catch (Exception ex) { Log("ERROR: " + ex.Message); }
+            finally { Busy(false); }
+        }) { IsBackground = true }.Start();
     }
 
     void RefreshFingerprints()
@@ -407,6 +541,7 @@ class ReleaseManager : Form
                     if (rc != 0) { Status("FAILED for " + board + " - see the log."); Busy(false); return; }
                 }
                 Status("Published. Customers see it on their next start.");
+                BeginInvoke((Action)LoadCloudList);
                 Log("");
                 Log("=== DONE. Published for " + who + ": " + string.Join(", ", boards) + " ===");
             }
@@ -879,7 +1014,7 @@ class ReleaseManager : Form
                 Log("");
                 Log("=== " + name + " is ready. Publish for them, then build their uploader folder. ===");
                 Status(name + " created.");
-                BeginInvoke((Action)LoadCustomers);
+                BeginInvoke((Action)(() => { LoadCustomers(); LoadCloudList(); }));
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); }
             finally { Busy(false); }

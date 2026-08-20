@@ -47,6 +47,13 @@ Double-click it in the uploader folder and do everything with buttons — no com
   <li><b>PUBLISH TO CLOUD</b> — pick the company + boards, press once. Both board revisions in one go.</li>
   <li><b>BUILD CUSTOMER UPLOADER FOLDER</b> — makes their ready-to-send folder: app + <b>their</b> license file
       + <b>their</b> latest firmware, with your keys automatically left out.</li>
+  <li><b>In the cloud right now</b> — the list at the bottom shows exactly what the selected
+      company can download today (the bold <b>NOW</b> row is what their app offers as “Latest”).
+      Pick a row and press <b>Remove selected</b> to take a release back: its files are deleted,
+      the list is re-signed and pushed, and the previous release becomes the latest again.
+      Controllers already updated are not affected.</li>
+  <li><b>CHECK A FOLDER</b> — re-checks a prepared customer folder: every .bin against its
+      delivery receipt <i>and</i> against the files selected above.</li>
   <li><b>Add new company…</b> — creates their channel and their license file.</li>
   <li><b>Back up keys</b> — copies both keys, the keystore and all issued licenses to a USB stick.</li>
 </ul>
@@ -138,6 +145,14 @@ and gets <b>KSP cloud updates</b> automatically whenever they have internet. Not
 <p>Then in the app press <b>“Use the files in the uploader folder”</b> → <b>Scan again</b> if needed.</p>
 
 <!-- ================================================================ -->
+<h2>3b &nbsp;Taking a release back off the cloud</h2>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\remove_version.ps1 -Version 20_08_26_KSP_rev5 -Customer ksp
+.\remove_version.ps1 -Version 19_08_26_General_rev6            # the shared/General channel</code></pre>
+<p>Deletes only the files that release used, re-signs the list and pushes it. The newest remaining
+release becomes “latest”, and it refuses to remove the last release of a channel.
+<b>The Release Manager does this from its list</b> (section 5, “Remove selected”).</p>
+
 <h2>4 &nbsp;New company (one time each)</h2>
 <pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
 .\new_customer.ps1 -Id acme -Name "ACME Water"
