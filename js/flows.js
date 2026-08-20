@@ -575,7 +575,12 @@ const Flows = {
        * a board without an ESP leaves the probe UART armed and a delayed
        * interrupt storm kills the stream ~13 s later at the same byte - a
        * reset fully defuses it (nothing re-arms the UART on the next boot). */
-      if (mode === "both" && !espPossible) {
+      if (mode === "both" && !ctx.pkg.esp) {
+        /* This release deliberately carries no cloud-module firmware (boards
+         * without an ESP32). Nothing to install, and no reason to probe for a
+         * module we could not update anyway - say so and move on. */
+        step("esp", "done", I18N.t("d.espNotIncluded"), 1);
+      } else if (mode === "both" && !espPossible) {
         /* warn, not done - a green check here read as "cloud module updated"
          * when it was actually skipped (needs the one-time BOOT-mode install
          * of system firmware 1.0.9). */

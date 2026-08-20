@@ -35,6 +35,7 @@ class ReleaseManager : Form
     string lastBuiltFolder;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
+    readonly ToolTip toolTip = new ToolTip();
 
     [STAThread]
     static void Main(string[] args)
@@ -126,6 +127,8 @@ class ReleaseManager : Form
         lblSysFp = FpLabel(y); y += 22;
 
         chkEsp = new CheckBox { Left = 24, Top = y + 2, Width = 154, Text = "Cloud module (ESP32)", Checked = true };
+        toolTip.SetToolTip(chkEsp, "Untick for boards without a cloud module: the release and the customer\n" +
+                                   "folder then carry no ESP32 firmware at all, and the updater skips that step.");
         Controls.Add(chkEsp);
         txtEsp = new TextBox { Left = 178, Top = y, Width = 620 };
         Controls.Add(txtEsp);
@@ -602,7 +605,13 @@ class ReleaseManager : Form
                     if (channel != "default") a.Append(" -Customer ").Append(channel);
                     a.Append(" -Main ").Append(Q(txtCtrl.Text));
                     if (chkSystem.Checked) a.Append(" -System ").Append(Q(txtSys.Text));
+                    /* Unticked means the release carries NO cloud-module
+                     * firmware. -NoEsp is required for that: with neither
+                     * flag the publisher quietly reuses the ESP files already
+                     * on the server, and the release would ship them after
+                     * all. */
                     if (chkEsp.Checked) a.Append(" -EspDir ").Append(Q(txtEsp.Text));
+                    else a.Append(" -NoEsp");
                     if (txtNotes.Text.Trim().Length > 0) a.Append(" -Notes ").Append(Q(txtNotes.Text.Trim().Replace("\"", "'")));
 
                     int rc = RunPs("publish_firmware.ps1", a.ToString());

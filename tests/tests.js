@@ -206,6 +206,45 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ------------------------- boards WITHOUT a cloud module (no ESP files) */
+    {
+      /* A release published with the ESP32 unticked has no esp entry at all.
+       * Downloading it must succeed for a normal update and only fail when
+       * the ESP is the whole point (the "update cloud module" action). */
+      const verNoEsp = { version: "noesp", controller: { url: "c.bin" }, system: { url: "s.bin" } };
+      let threwOptional = null, threwRequired = null;
+      const fakeManifest = { _baseUrl: new URL("http://127.0.0.1/x/manifest.json") };
+      const origDownload = Cloud.download;
+      Cloud.download = async () => new Uint8Array([1, 2, 3]);
+      try {
+        const pkg = await Cloud.downloadPackage(fakeManifest, verNoEsp, null,
+                                                { controller: true, system: true, esp: "optional" });
+        this.check("no-esp: a normal update downloads fine and simply has no ESP files",
+          pkg.controller !== null && pkg.esp === null);
+      } catch (e) { threwOptional = e; this.check("no-esp: a normal update downloads fine", false, e.message); }
+      try {
+        await Cloud.downloadPackage(fakeManifest, verNoEsp, null,
+                                    { controller: false, system: true, esp: "required" });
+      } catch (e) { threwRequired = e; }
+      Cloud.download = origDownload;
+      this.check("no-esp: 'update cloud module' on such a release is refused with a clear message",
+        !!threwRequired);
+
+      this.check("no-esp: validation only demands ESP files when they are the point",
+        (() => {
+          try { Validate.checkPackage({ controller: null, system: null, esp: null },
+                                      { controller: false, system: false, esp: false }); return true; }
+          catch (e) { return false; }
+        })());
+
+      const fsrc = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      this.check("no-esp: the update skips the cloud-module step entirely (no pointless probe)",
+        /mode === "both" && !ctx\.pkg\.esp/.test(fsrc) && /d\.espNotIncluded/.test(fsrc));
+      const rmsrc = await (await fetch("../tools/ReleaseManager.cs", { cache: "no-store" })).text();
+      this.check("no-esp: unticking the cloud module publishes with -NoEsp (never reuses old ESP files)",
+        /else a\.Append\(" -NoEsp"\)/.test(rmsrc));
+    }
+
     /* --------------------------------- firmware fingerprints (.bin identity) */
     {
       const bin = new Uint8Array([1, 2, 3, 4, 5]);
