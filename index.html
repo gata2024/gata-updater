@@ -52,10 +52,6 @@
       </div>
       <p id="licError" class="err small hidden"></p>
     </div>
-    <div id="licShow" class="hidden">
-      <p><span data-i18n="lic.licensedTo">Licensed to</span> <b id="licWho"></b> <span id="licExp" class="muted small"></span></p>
-      <button id="btnLicChange" class="btn small" data-i18n="lic.change">Change license</button>
-    </div>
   </section>
 
   <!-- STEP 1 : firmware source -->
@@ -208,6 +204,8 @@
   <footer class="foot">
     <span id="verInfo">GATA Cloud Uploader</span> ·
     <span id="capsInfo"></span>
+    <span id="licLine" class="hidden"> · <span data-i18n="lic.licensedTo">Licensed to</span>
+      <b id="licWho"></b> <span id="licExp"></span></span>
   </footer>
 </main>
 
@@ -228,6 +226,9 @@
   <label class="chk indent"><input type="checkbox" id="chkDemoEsp" checked> <span data-i18n="settings.demoEsp">Simulated board has an ESP32</span></label>
   <div class="row gap">
     <button id="btnClearCache" class="btn ghost" data-i18n="btn.clearCache">Clear downloaded firmware cache</button>
+  </div>
+  <div class="row gap">
+    <button id="btnLicChange" class="btn ghost" data-i18n="lic.change">Change license</button>
   </div>
   <div class="row gap right">
     <button id="btnSettingsClose" class="btn primary" data-i18n="btn.done">Done</button>

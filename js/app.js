@@ -62,15 +62,16 @@ const App = {
   },
 
   /* --------------------------------------------------------------- license */
+  /* Licensed is the normal state: it belongs in the footer as one quiet line,
+   * next to the version. The card only appears when the app actually needs a
+   * license file - i.e. when there is something for the user to DO. */
   renderLicense() {
-    const card = this.$("licenseCard");
     const lic = License.info();
-    if (lic && lic.legacy) { card.classList.add("hidden"); return; }  // old per-customer package
-    card.classList.remove("hidden");
-    this.$("licEnter").classList.toggle("hidden", !!lic);
-    this.$("licShow").classList.toggle("hidden", !lic);
+    this.$("licenseCard").classList.toggle("hidden", !!lic);
+    const line = this.$("licLine");
+    line.classList.toggle("hidden", !lic);
     if (lic) {
-      this.$("licWho").textContent = lic.customer + " (" + lic.channel + ")";
+      this.$("licWho").textContent = lic.customer;
       this.$("licExp").textContent = lic.exp ? I18N.t("lic.until", { d: lic.exp }) : "";
     }
   },
@@ -722,11 +723,11 @@ const App = {
     this.$("btnLicChange").onclick = async () => {
       License.clear();
       this.manifest = null;
-      /* A bundled gata.license immediately re-licenses the app - "change"
-       * then means: pick a DIFFERENT file, so only fall back to the bundled
-       * one when the user does not choose anything. */
       this.renderVersions();
       this.renderLicense();
+      this.$("dlgSettings").close();
+      /* A bundled gata.license would re-license the app on the next start;
+       * "change" means pick a DIFFERENT file, so open the picker now. */
       this.$("licFile").click();
     };
 
