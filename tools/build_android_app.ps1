@@ -75,6 +75,11 @@ $twa.fullScopeUrl = ($SiteBase + $(if ($Id) { "/c/$Id/" } else { "/" })) -replac
 # ---- generate + build ----------------------------------------------------
 Push-Location $android
 try {
+    # Push-Location moves POWERSHELL's location but not the PROCESS working
+    # directory, so child programs (npx, cmd) would still start wherever this
+    # script was launched from - that is why gradlew.bat was "not recognized".
+    [Environment]::CurrentDirectory = $android
+
     $env:BUBBLEWRAP_KEYSTORE_PASSWORD = $KeystorePassword
     $env:BUBBLEWRAP_KEY_PASSWORD = $KeystorePassword
     $env:JAVA_HOME = $jdk
@@ -87,7 +92,13 @@ try {
     Write-Host "   compiling (first run downloads Gradle - be patient)..."
     $tasks = @("assembleRelease")
     if ($Bundle) { $tasks += "bundleRelease" }
-    & cmd /c "gradlew.bat $($tasks -join ' ') --no-daemon" 2>&1 | Select-String -Pattern "BUILD SUCCESSFUL|BUILD FAILED|error:" | ForEach-Object { "     $_" }
+    # Full path to the batch file AND an explicit cd. Bare "gradlew.bat" is not
+    # found even when it sits in the current folder (Windows does not put the
+    # current directory on the executable search path here).
+    $gradlew = Join-Path $android "gradlew.bat"
+    & cmd /c "cd /d ""$android"" && ""$gradlew"" $($tasks -join ' ') --no-daemon" 2>&1 |
+        Select-String -Pattern "BUILD SUCCESSFUL|BUILD FAILED|error:|FAILURE:|What went wrong" |
+        ForEach-Object { "     $_" }
 
     $unsigned = Get-ChildItem "app\build\outputs\apk\release\*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $unsigned) { throw "No APK produced - check the Gradle output above." }
@@ -122,3 +133,9 @@ Write-Host (@"
                 "sha256_cert_fingerprints": ["$($fp.Trim())"] }
   }
 "@)
+
+# The script throws on any real failure (ErrorActionPreference = Stop), so
+# reaching this line means the APK is built - report it plainly. Without this
+# a trailing native tool left a non-zero code and callers read success as
+# failure.
+exit 0

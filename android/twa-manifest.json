@@ -1,42 +1,56 @@
 {
-  "packageId": "com.gata.updater",
-  "host": "gata2024.github.io",
-  "name": "GATA Firmware Updater",
-  "launcherName": "GATA Update",
-  "display": "standalone",
-  "themeColor": "#0b57d0",
-  "themeColorDark": "#0b57d0",
-  "navigationColor": "#0b57d0",
-  "navigationColorDark": "#0b57d0",
-  "navigationDividerColor": "#0b57d0",
-  "navigationDividerColorDark": "#0b57d0",
-  "backgroundColor": "#0b57d0",
-  "enableNotifications": false,
-  "startUrl": "/gata-updater/",
-  "iconUrl": "https://gata2024.github.io/gata-updater/icon-512.png",
-  "maskableIconUrl": "https://gata2024.github.io/gata-updater/icon-512-maskable.png",
-  "splashScreenFadeOutDuration": 300,
-  "signingKey": {
-    "path": "./gata-release.keystore",
-    "alias": "gata"
-  },
-  "appVersionName": "1.7.0",
-  "appVersionCode": 10700,
-  "shortcuts": [],
-  "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://gata2024.github.io/gata-updater/app.webmanifest",
-  "fallbackType": "customtabs",
-  "features": {},
-  "alphaDependencies": { "enabled": false },
-  "enableSiteSettingsShortcut": true,
-  "isChromeOSOnly": false,
-  "isMetaQuest": false,
-  "fullScopeUrl": "https://gata2024.github.io/gata-updater/",
-  "minSdkVersion": 21,
-  "orientation": "any",
-  "additionalTrustedOrigins": [],
-  "retainedBundles": [],
-  "protocolHandlers": [],
-  "fileHandlers": [],
-  "launchHandlerClientMode": ""
+    "packageId":  "com.gata.updater",
+    "host":  "gata2024.github.io",
+    "name":  "GATA Firmware Updater",
+    "launcherName":  "GATA Update",
+    "display":  "standalone",
+    "themeColor":  "#0b57d0",
+    "themeColorDark":  "#0b57d0",
+    "navigationColor":  "#0b57d0",
+    "navigationColorDark":  "#0b57d0",
+    "navigationDividerColor":  "#0b57d0",
+    "navigationDividerColorDark":  "#0b57d0",
+    "backgroundColor":  "#0b57d0",
+    "enableNotifications":  false,
+    "startUrl":  "/gata-updater/",
+    "iconUrl":  "https://gata2024.github.io/gata-updater/icon-512.png",
+    "maskableIconUrl":  "https://gata2024.github.io/gata-updater/icon-512-maskable.png",
+    "splashScreenFadeOutDuration":  300,
+    "signingKey":  {
+                       "path":  "./gata-release.keystore",
+                       "alias":  "gata"
+                   },
+    "appVersionName":  "1.7.0",
+    "appVersionCode":  10700,
+    "shortcuts":  [
+
+                  ],
+    "generatorApp":  "bubblewrap-cli",
+    "webManifestUrl":  "https://gata2024.github.io/gata-updater/app.webmanifest",
+    "fallbackType":  "customtabs",
+    "features":  {
+
+                 },
+    "alphaDependencies":  {
+                              "enabled":  false
+                          },
+    "enableSiteSettingsShortcut":  true,
+    "isChromeOSOnly":  false,
+    "isMetaQuest":  false,
+    "fullScopeUrl":  "https://gata2024.github.io/gata-updater/",
+    "minSdkVersion":  21,
+    "orientation":  "any",
+    "additionalTrustedOrigins":  [
+
+                                 ],
+    "retainedBundles":  [
+
+                        ],
+    "protocolHandlers":  [
+
+                         ],
+    "fileHandlers":  [
+
+                     ],
+    "launchHandlerClientMode":  ""
 }

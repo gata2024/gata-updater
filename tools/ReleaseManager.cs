@@ -30,7 +30,7 @@ class ReleaseManager : Form
     ComboBox cboCustomer;
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog, txtDest;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk;
     ListView lstCloud;
     string lastBuiltFolder;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
@@ -162,11 +162,12 @@ class ReleaseManager : Form
         btnCheck = Mk("CHECK A FOLDER", 524, y, 150, (s, e) => CheckFolder());
         btnCheck.Height = 34;
         btnCheck.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        btnBackup = Mk("Back up keys", 684, y, 110, (s, e) => BackupKeys());
-        btnBackup.Height = 34;
-        btnOpenGuide = Mk("Guide", 804, y, 70, (s, e) => OpenGuide());
-        btnOpenGuide.Height = 34;
-        y += 44;
+        btnApk = Mk("ANDROID APP (.apk)", 684, y, 160, (s, e) => BuildApk());
+        btnApk.Height = 34;
+        y += 40;
+        btnBackup = Mk("Back up keys", 24, y, 120, (s, e) => BackupKeys());
+        btnOpenGuide = Mk("Guide", 154, y, 80, (s, e) => OpenGuide());
+        y += 36;
 
         // ---------------- 5. what is in the cloud right now ----------------
         y = Section("5.  In the cloud for this company right now", y);
@@ -488,6 +489,8 @@ class ReleaseManager : Form
         if (InvokeRequired) { BeginInvoke((Action)(() => Busy(on))); return; }
         bar.Visible = on;
         btnPublish.Enabled = btnBuildFolder.Enabled = btnNewCompany.Enabled = btnBackup.Enabled = !on;
+        if (btnApk != null) btnApk.Enabled = !on;
+        if (btnRemove != null) btnRemove.Enabled = !on;
         Cursor = on ? Cursors.WaitCursor : Cursors.Default;
     }
 
@@ -1094,6 +1097,57 @@ class ReleaseManager : Form
                 BeginInvoke((Action)(() => { LoadCustomers(); LoadCloudList(); }));
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); }
+            finally { Busy(false); }
+        }) { IsBackground = true }.Start();
+    }
+
+    /* Build the installable Android app. ONE apk serves every company - the
+     * customer opens their license file in it (Open license file...), exactly
+     * like the PC version, so there is nothing per-customer to build.
+     * The apk wraps the HOSTED site, so publish the app first if you changed
+     * it; firmware updates need no new apk at all. */
+    void BuildApk()
+    {
+        if (MessageBox.Show(
+                "Build the Android app (.apk)?\n\n" +
+                "One app for every company - each customer opens their own license\n" +
+                "file inside it. It loads the published web app, so make sure the\n" +
+                "app itself is up to date on GitHub.\n\n" +
+                "Takes a few minutes the first time.",
+                "Android app", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+
+        Busy(true);
+        new Thread(() =>
+        {
+            try
+            {
+                Status("Building the Android app (this takes a few minutes)...");
+                DateTime started = DateTime.Now.AddSeconds(-5);
+                RunPs("build_android_app.ps1", "");
+                /* Judge by the FILE, not the exit code: the Android tools leave
+                 * odd exit codes behind even on a clean build. A fresh apk on
+                 * disk is the honest proof. */
+                string apk = Path.Combine(AppDir, @"dist\gata-updater.apk");
+                if (File.Exists(apk) && File.GetLastWriteTime(apk) >= started)
+                {
+                    var fi = new FileInfo(apk);
+                    Log("");
+                    Log("=== APK READY: " + apk + "  (" + string.Format("{0:N0}", fi.Length) + " bytes) ===");
+                    Log("Send it to the phone and open it (Android asks to allow installing from this source).");
+                    Status("Android app ready.");
+                    if (MessageBox.Show("Android app built:\n\n" + apk + "\n\nOpen the folder?",
+                                        "Done", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                        Process.Start("explorer.exe", "/select,\"" + apk + "\"");
+                }
+                else
+                {
+                    Status("APK build failed - see the log.");
+                    MessageBox.Show("The Android build did not finish - see the log.\n\n" +
+                                    "It needs Android Studio (JDK), the Android SDK and Node/npx on this PC.",
+                                    "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
             finally { Busy(false); }
         }) { IsBackground = true }.Start();
     }
