@@ -639,6 +639,7 @@ class ReleaseManager : Form
         receipt.Append("  \"built\": \"").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm")).Append("\",\n");
         receipt.Append("  \"files\": {\n");
         var lines = new List<string>();
+        var built = new List<string>();
 
         Action<string, string, string> put = (srcPath, folder, destName) =>
         {
@@ -651,7 +652,14 @@ class ReleaseManager : Form
                 return;
             }
             lines.Add("    \"" + folder + "/" + destName + "\": \"" + dstHash + "\"");
-            log("      " + folder + "\\" + destName + "   [" + dstHash.Substring(0, 12) + "]");
+            /* The moment the compiler produced this .bin. Windows keeps the
+             * last-write time through a copy, so it still says when the
+             * firmware was BUILT, not when it was packed. Metadata only - the
+             * fingerprint above is what is actually enforced. */
+            built.Add("    \"" + folder + "/" + destName + "\": \"" +
+                      File.GetLastWriteTime(srcPath).ToString("yyyy-MM-dd HH:mm") + "\"");
+            log("      " + folder + "\\" + destName + "   [" + dstHash.Substring(0, 12) + "]" +
+                "   built " + File.GetLastWriteTime(srcPath).ToString("yyyy-MM-dd HH:mm"));
             n++;
         };
 
@@ -667,7 +675,8 @@ class ReleaseManager : Form
                 put(src, "cloud_firmware", part);
             }
 
-        receipt.Append(string.Join(",\n", lines.ToArray())).Append("\n  }\n}\n");
+        receipt.Append(string.Join(",\n", lines.ToArray())).Append("\n  },\n");
+        receipt.Append("  \"built_times\": {\n").Append(string.Join(",\n", built.ToArray())).Append("\n  }\n}\n");
         File.WriteAllText(Path.Combine(dest, "firmware_receipt.json"), receipt.ToString(), new UTF8Encoding(false));
 
         /* The same thing in plain words, so it can be checked by opening a
@@ -683,13 +692,19 @@ class ReleaseManager : Form
         txt.AppendLine("re-checks every one of them before installing and REFUSES to install");
         txt.AppendLine("a file whose fingerprint does not match this list.");
         txt.AppendLine();
-        foreach (string l in lines)
+        for (int i = 0; i < lines.Count; i++)
         {
-            string t = l.Trim().TrimStart('"');
+            string t = lines[i].Trim().TrimStart('"');
             int q = t.IndexOf("\": \"");
             if (q < 0) continue;
             txt.AppendLine("  " + t.Substring(0, q));
             txt.AppendLine("      fingerprint " + t.Substring(q + 4).TrimEnd('"'));
+            if (i < built.Count)
+            {
+                string bt = built[i].Trim().TrimStart('"');
+                int bq = bt.IndexOf("\": \"");
+                if (bq >= 0) txt.AppendLine("      built       " + bt.Substring(bq + 4).TrimEnd('"'));
+            }
         }
         txt.AppendLine();
         txt.AppendLine("Source files these came from (on the release PC):");
