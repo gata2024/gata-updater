@@ -357,16 +357,26 @@ const App = {
     }
 
     // ESP32 files
+    /* A delivery receipt that lists no cloud-module files means this software
+     * was prepared WITHOUT one (boards with no ESP32). That is a normal state,
+     * not a missing file - showing it in red made a correct delivery look
+     * broken. Folders filled in by hand have no receipt, so those keep the
+     * "not found" wording. */
+    const receiptHasEsp = !!(f.receipt && f.receipt.files &&
+      Object.keys(f.receipt.files).some(k => k.indexOf("cloud_firmware/") === 0));
+    const espDeliberatelyNone = !f.esp.firmware && !!f.receipt && !receiptHasEsp;
+
     let espDetail = f.espComplete ? I18N.t("local.espComplete")
       : (f.esp.firmware ? I18N.t("local.espFwOnly")
-      : I18N.t("local.missing") + " (cloud_firmware) — " + I18N.t("opt"));
+      : (espDeliberatelyNone ? I18N.t("local.espNotIncluded")
+      : I18N.t("local.missing") + " (cloud_firmware) — " + I18N.t("opt")));
     if (f.esp.firmware) {
       const espSize = f.sizeOf ? f.sizeOf[f.esp.firmware] : 0;
       const espWhen = f.builtAt ? f.builtAt("cloud_firmware/" + f.esp.firmware) : null;
       if (espSize) espDetail += "  (" + Util.fmtBytes(espSize) + ")";
       if (espWhen) espDetail += "   ·   " + I18N.t("local.builtAt", { d: espWhen });
     }
-    row(!!f.esp.firmware, I18N.t("local.esp"), espDetail);
+    row(!!f.esp.firmware || espDeliberatelyNone, I18N.t("local.esp"), espDetail);
 
     // The listing endpoint only exists in the current serve.ps1 - if we had
     // to fall back to name-probing on localhost, the user is running an old

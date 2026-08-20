@@ -65,6 +65,7 @@ class ReleaseManager : Form
         if (args.Length >= 3 && args[0].Equals("/buildfolder", StringComparison.OrdinalIgnoreCase))
         {
             string board = args.Length >= 4 ? args[3] : "rev5";
+            bool noEsp = args.Any(a => a.Equals("/noesp", StringComparison.OrdinalIgnoreCase));
             var f = new ReleaseManager();
             string who = args[1] == "default" ? "General" : Pretty(args[1]);
             var probs = f.BuildFolderCore(args[1],
@@ -72,7 +73,7 @@ class ReleaseManager : Form
                 board,
                 Path.Combine(RepoRoot, @"g_500\Debug\NPC20_mini.bin"),
                 Path.Combine(RepoRoot, @"USBupdaterCode_relbuild\Debug\Booster_phase.bin"),
-                Path.Combine(RepoRoot, @"esp\.pio\build\esp32dev"),
+                noEsp ? null : Path.Combine(RepoRoot, @"esp\.pio\build\esp32dev"),
                 s => Console.WriteLine(s));
             foreach (string p in probs) Console.WriteLine("PROBLEM: " + p);
             return;

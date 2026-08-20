@@ -243,6 +243,14 @@ const T = {
       const rmsrc = await (await fetch("../tools/ReleaseManager.cs", { cache: "no-store" })).text();
       this.check("no-esp: unticking the cloud module publishes with -NoEsp (never reuses old ESP files)",
         /else a\.Append\(" -NoEsp"\)/.test(rmsrc));
+      this.check("no-esp: the customer folder still always gets the system firmware",
+        /always goes in: the updater needs it/.test(rmsrc) &&
+        /MISSING: main_firmware\\\\system\*\.bin/.test(rmsrc));
+
+      const asrc2 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      this.check("no-esp: a delivery prepared without a cloud module reads 'not included', not 'missing'",
+        /espDeliberatelyNone/.test(asrc2) && /local\.espNotIncluded/.test(asrc2) &&
+        /cloud_firmware\//.test(asrc2));
     }
 
     /* --------------------------------- firmware fingerprints (.bin identity) */
