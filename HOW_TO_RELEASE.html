@@ -106,13 +106,15 @@ publish usually still went through. To push GitHub by hand:
 <h3>Step 2 — put THEIR license in</h3>
 <pre><button class="copy">Copy</button><code>copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools\licenses\KSP.gata.license" "D:\Uploader_KSP\gata.license"</code></pre>
 
-<h3>Step 3 — put THEIR offline .bin files in</h3>
-<p>Take the files of the version you published for them (they are in the <code>firmware\</code> folder after publishing):</p>
-<pre><button class="copy">Copy</button><code>copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\controller_20_08_26_KSP_rev6.bin" "D:\Uploader_KSP\main_firmware\"
-copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\system_20_08_26_KSP_rev6.bin"     "D:\Uploader_KSP\main_firmware\"
-copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\firmware\esp\20_08_26_KSP_rev6\*"          "D:\Uploader_KSP\cloud_firmware\"</code></pre>
-<p>(Adjust the version name to the one you actually published. Delete any OLD bins already in
-<code>main_firmware\</code> first so there is no confusion.)</p>
+<h3>Step 3 — put the .bin files in</h3>
+<p>Copy the same three build outputs you publish with, renaming them so the company and board are visible
+(<code>controller_&lt;dd_MM_yy&gt;_&lt;Company&gt;_&lt;rev&gt;.bin</code>). Delete any old bins there first.</p>
+<pre><button class="copy">Copy</button><code>copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin" "D:\Uploader_KSP\main_firmware\controller_20_08_26_KSP_rev6.bin"
+copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin" "D:\Uploader_KSP\main_firmware\system_20_08_26_KSP_rev6.bin"
+copy "D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev\*.bin" "D:\Uploader_KSP\cloud_firmware\"</code></pre>
+<p>The ESP files must keep their exact names (<code>bootloader.bin</code>, <code>partitions.bin</code>,
+<code>boot_app0.bin</code>, <code>firmware.bin</code>) — the app looks for those four.
+<b>The Release Manager button does all of this for you</b>, using the files shown in its window.</p>
 
 <h3>Step 4 — send the whole <code>D:\Uploader_KSP</code> folder (zip it)</h3>
 <p>The customer runs <code>CLICK_ME_START_ON_PC.bat</code>. The app licenses itself as
