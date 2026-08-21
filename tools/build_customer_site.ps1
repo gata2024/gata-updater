@@ -25,6 +25,10 @@ param(
     [string]$System,
     [string]$EspDir,
     [switch]$NoEsp,
+    # Cloud-only app: no firmware inside it at all. Use after withdrawing a
+    # release - the built-in copy is what a phone installs with no internet,
+    # so leaving it there keeps handing out the firmware that was taken back.
+    [switch]$NoFirmware,
     [string]$SiteBase = "https://raw.githubusercontent.com/gata2024/gata-firmware/main"
 )
 $ErrorActionPreference = "Stop"
@@ -141,9 +145,11 @@ function Put([string]$src, [string]$folder, [string]$destName) {
 }
 
 $n = 0
-if (Put $Controller "main_firmware" ("controller_" + $tag + ".bin")) { $n++ }
-if (Put $System     "main_firmware" ("system_"     + $tag + ".bin")) { $n++ }
-if (-not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
+if (-not $NoFirmware) {
+  if (Put $Controller "main_firmware" ("controller_" + $tag + ".bin")) { $n++ }
+  if (Put $System     "main_firmware" ("system_"     + $tag + ".bin")) { $n++ }
+}
+if (-not $NoFirmware -and -not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
     foreach ($part in @("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")) {
         if (Put (Join-Path $EspDir $part) "cloud_firmware" $part) { $n++ }
         else { Write-Host "      ! missing ESP file: $part" -ForegroundColor Yellow }
@@ -154,8 +160,12 @@ if (-not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
 $rec = [ordered]@{ company = $Name; board = $Board;
                    built = (Get-Date -Format "yyyy-MM-dd HH:mm");
                    files = $receipt; built_times = $builtAt }
-[IO.File]::WriteAllText((Join-Path $site "firmware_receipt.json"),
-                        ($rec | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+if ($NoFirmware) {
+    Remove-Item (Join-Path $site "firmware_receipt.json") -Force -ErrorAction SilentlyContinue
+} else {
+    [IO.File]::WriteAllText((Join-Path $site "firmware_receipt.json"),
+                            ($rec | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+}
 
 # builtin.json: what the service worker stores on the phone. A hosted site has
 # no directory listing, so this list is the ONLY way the app finds these files.
@@ -172,12 +182,23 @@ Write-Host "   firmware   : $n file(s) inside the app  (+ builtin.json, firmware
 
 # ------------------------------------------------------------------- self-check
 $problems = @()
-foreach ($need in @("index.html", "sw.js", "gata.license", "builtin.json", "firmware_receipt.json",
-                    "js\config.js", "js\dfuse.js", "js\app.js")) {
+$needed = @("index.html", "sw.js", "gata.license", "builtin.json",
+            "js\config.js", "js\dfuse.js", "js\app.js")
+if (-not $NoFirmware) { $needed += "firmware_receipt.json" }
+foreach ($need in $needed) {
     if (-not (Test-Path (Join-Path $site $need))) { $problems += "MISSING: $need" }
 }
-if ((Get-ChildItem $mainDir -Filter "system*.bin").Count -eq 0) { $problems += "MISSING: main_firmware\system*.bin" }
-if ((Get-ChildItem $mainDir -Filter "controller*.bin").Count -eq 0) { $problems += "MISSING: main_firmware\controller*.bin" }
+if ($NoFirmware) {
+    # Nothing may be left behind: the built-in copy is what a phone installs
+    # with no internet, so a leftover .bin would still hand out the firmware
+    # that was withdrawn.
+    if ((Get-ChildItem $mainDir  -Filter *.bin).Count -ne 0) { $problems += "firmware is still in main_firmware" }
+    if ((Get-ChildItem $cloudDir -Filter *.bin).Count -ne 0) { $problems += "firmware is still in cloud_firmware" }
+    Write-Host "   firmware   : NONE - this app updates from the cloud only." -ForegroundColor Yellow
+} else {
+    if ((Get-ChildItem $mainDir -Filter "system*.bin").Count -eq 0) { $problems += "MISSING: main_firmware\system*.bin" }
+    if ((Get-ChildItem $mainDir -Filter "controller*.bin").Count -eq 0) { $problems += "MISSING: main_firmware\controller*.bin" }
+}
 $cfgNow = [IO.File]::ReadAllText($cfgPath)
 if ($cfgNow -notmatch [regex]::Escape($manifestUrl)) { $problems += "config.js does not point at $manifestUrl" }
 if ($cfgNow -notmatch ('channel:\s*"' + [regex]::Escape($Id) + '"')) { $problems += "config.js channel is not '$Id'" }

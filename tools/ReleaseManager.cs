@@ -585,6 +585,102 @@ class ReleaseManager : Form
     /* Take a release out of a company's cloud list. The files it alone used
      * are deleted too, the manifest is re-signed and pushed - all by
      * tools\remove_version.ps1, so it behaves exactly like publishing. */
+    /* Is the firmware just put into a folder (or an app) actually published
+     * for this company? Compared by SHA-256 against every version in their
+     * channel. A folder is allowed to carry unpublished firmware - that is
+     * what offline delivery is - but shipping a build that was withdrawn from
+     * the cloud is worth a plain warning rather than silence. */
+    void WarnIfNotPublished(string channel, string who, string dir, Action<string> log)
+    {
+        try
+        {
+            string man = channel == "default"
+                ? Path.Combine(FirmwareDir, "manifest.json")
+                : Path.Combine(FirmwareDir, "customers", channel, "manifest.json");
+            if (!File.Exists(man)) return;
+
+            var published = new HashSet<string>();
+            int versions = 0;
+            foreach (string block in VersionBlocks(File.ReadAllText(man)))
+            {
+                versions++;
+                foreach (var f in FilesOf(block))
+                    if (!string.IsNullOrEmpty(f.Sha)) published.Add(f.Sha.ToLowerInvariant());
+            }
+
+            var strangers = new List<string>();
+            string mainDir = Path.Combine(dir, "main_firmware");
+            if (Directory.Exists(mainDir))
+                foreach (string f in Directory.GetFiles(mainDir, "*.bin"))
+                    if (!published.Contains(Sha256(f).ToLowerInvariant()))
+                        strangers.Add(Path.GetFileName(f));
+
+            if (versions == 0)
+            {
+                log("   !! " + who + " has NOTHING published in the cloud right now, yet this");
+                log("      folder installs firmware. If it was withdrawn, do not send this folder.");
+            }
+            else if (strangers.Count > 0)
+            {
+                log("   !  not published for " + who + ": " + string.Join(", ", strangers.ToArray()));
+                log("      (fine for an offline delivery - but if it was withdrawn, do not send it)");
+            }
+        }
+        catch (Exception ex) { log("   ! could not compare with the cloud: " + ex.Message); }
+    }
+
+    /* Which files of a published version are ALSO sitting inside a company's
+     * app. Matched by SHA-256, never by name: the app names its copies after
+     * the day they were put in, so the same binary lives under two different
+     * names and a name comparison would always say "no". */
+    List<string> FirmwareAlsoInApp(string version, string appDir)
+    {
+        var hit = new List<string>();
+        try
+        {
+            if (!cloudBlocks.ContainsKey(version) || !Directory.Exists(appDir)) return hit;
+            var want = new HashSet<string>();
+            foreach (var f in FilesOf(cloudBlocks[version]))
+                if (!string.IsNullOrEmpty(f.Sha) && f.What != "Licence") want.Add(f.Sha.ToLowerInvariant());
+            if (want.Count == 0) return hit;
+
+            foreach (string sub in new[] { "main_firmware", "cloud_firmware" })
+            {
+                string d = Path.Combine(appDir, sub);
+                if (!Directory.Exists(d)) continue;
+                foreach (string f in Directory.GetFiles(d, "*.bin"))
+                    if (want.Contains(Sha256(f).ToLowerInvariant()))
+                        hit.Add(sub + "\\" + Path.GetFileName(f));
+            }
+        }
+        catch (Exception ex) { Log("   ! could not check the app's firmware: " + ex.Message); }
+        return hit;
+    }
+
+    /* Empty an app's built-in firmware. A half set is not installable, so it
+     * goes as one: the binaries, the list the phone reads, and the receipt.
+     * The service worker drops what builtin.json no longer names, so phones
+     * let go of their stored copy on the next start with internet. */
+    void ClearBuiltIn(string appDir, string who)
+    {
+        try
+        {
+            int n = 0;
+            foreach (string sub in new[] { "main_firmware", "cloud_firmware" })
+            {
+                string d = Path.Combine(appDir, sub);
+                if (!Directory.Exists(d)) continue;
+                foreach (string f in Directory.GetFiles(d, "*.bin")) { File.Delete(f); n++; }
+            }
+            WriteBuiltinList(appDir, null);
+            string rec = Path.Combine(appDir, "firmware_receipt.json");
+            if (File.Exists(rec)) File.Delete(rec);
+            Log("   " + who + "'s app: " + n + " built-in firmware file(s) removed.");
+            Log("   DEPLOY (git push) so phones stop offering it - until then nothing changes for them.");
+        }
+        catch (Exception ex) { Log("   ! could not empty the app's firmware: " + ex.Message); }
+    }
+
     void RemoveSelected()
     {
         if (lstCloud.SelectedItems.Count == 0)
@@ -603,9 +699,37 @@ class ReleaseManager : Form
                       "Controllers already updated are NOT affected.";
         if (isLast)
             warn += "\n\nThis is their LAST version - " + who + " will have nothing to " +
-                    "download until you publish again. Their uploader folder still works offline.";
+                    "download until you publish again.";
+
+        /* Taking a release off the cloud does NOT touch the copies that are
+         * kept for working without internet: the same binaries sit inside the
+         * company's app (phones) and inside every folder already sent. If the
+         * release was withdrawn because it was bad, those keep installing it.
+         * Find out BEFORE removing, while the manifest still describes it. */
+        string appDirOfCompany = channel == "default" ? AppDir : Path.Combine(AppDir, "c\\" + channel);
+        var alsoInApp = FirmwareAlsoInApp(ver, appDirOfCompany);
+        if (alsoInApp.Count > 0)
+            warn += "\n\nTHE SAME FIRMWARE IS ALSO INSIDE " + who.ToUpperInvariant() + "'S APP:\n" +
+                    "   " + string.Join("\n   ", alsoInApp.ToArray()) + "\n" +
+                    "Phones install that copy with no internet, so removing it from the\n" +
+                    "cloud alone does not stop it. You will be asked about it next.";
         if (MessageBox.Show(warn, "Remove version", MessageBoxButtons.OKCancel,
                             MessageBoxIcon.Warning) != DialogResult.OK) return;
+
+        bool clearApp = false;
+        if (alsoInApp.Count > 0)
+        {
+            clearApp = MessageBox.Show(
+                "Also take this firmware OUT of " + who + "'s app?\n\n" +
+                "Yes - the app's built-in firmware is emptied, and phones drop their\n" +
+                "stored copy on the next start with internet. They can still update\n" +
+                "from the cloud. Put new firmware in with FIRMWARE INSIDE THE APP.\n\n" +
+                "No - the app keeps installing this firmware offline.\n\n" +
+                "(Folders already sent to " + who + " keep their copy either way -\n" +
+                "there is no way to reach those; rebuild and resend them.)",
+                "Firmware inside the app", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) == DialogResult.Yes;
+        }
 
         Busy(true);
         new Thread(() =>
@@ -617,6 +741,7 @@ class ReleaseManager : Form
                 a.Append("-Version ").Append(Q(ver));
                 if (channel != "default") a.Append(" -Customer ").Append(channel);
                 int rc = RunPs("remove_version.ps1", a.ToString());
+                if (rc == 0 && clearApp) ClearBuiltIn(appDirOfCompany, who);
                 Status(rc == 0 ? ver + " removed." : "Remove failed - see the log.");
                 BeginInvoke((Action)LoadCloudList);
             }
@@ -1084,6 +1209,12 @@ class ReleaseManager : Form
         /* The offline files are simply the ones picked in the window. */
         int n = CopySelectedFirmware(dest, who, board, ctrlPath, sysPath, espDir, log);
         log("   firmware files put in the folder: " + n);
+
+        /* A folder keeps its own copy so it works with no internet - which
+         * also means it happily ships firmware that is NOT published for this
+         * company, including a release that was withdrawn from the cloud. Say
+         * so: the folder is still valid, but it is worth knowing. */
+        WarnIfNotPublished(channel, who, dest, log);
         if (n == 0)
             problems.Add("No firmware files were copied - check the file paths in the window.");
 
