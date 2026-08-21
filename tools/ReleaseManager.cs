@@ -37,6 +37,9 @@ class ReleaseManager : Form
     ProgressBar bar;
     readonly ToolTip toolTip = new ToolTip();
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern bool AttachConsole(int processId);   // -1 = the parent's console
+
     [STAThread]
     static void Main(string[] args)
     {
@@ -64,8 +67,12 @@ class ReleaseManager : Form
          *     GATA_Release_Manager.exe /buildfolder <channel> <parent folder>  */
         if (args.Length >= 3 && args[0].Equals("/buildfolder", StringComparison.OrdinalIgnoreCase))
         {
+            /* A winexe has no console of its own: without this, everything
+             * below is written into the void when run from a shell. */
+            AttachConsole(-1);
             string board = args.Length >= 4 ? args[3] : "rev5";
             bool noEsp = args.Any(a => a.Equals("/noesp", StringComparison.OrdinalIgnoreCase));
+            Headless = true;
             var f = new ReleaseManager();
             string who = args[1] == "default" ? "General" : Pretty(args[1]);
             var probs = f.BuildFolderCore(args[1],
@@ -76,14 +83,24 @@ class ReleaseManager : Form
                 noEsp ? null : Path.Combine(RepoRoot, @"esp\.pio\build\esp32dev"),
                 s => Console.WriteLine(s));
             foreach (string p in probs) Console.WriteLine("PROBLEM: " + p);
+            Environment.Exit(probs.Count);      // 0 = the folder is good to send
             return;
         }
 
         Application.Run(new ReleaseManager());
     }
 
+    /* /buildfolder needs the file-copying half of this class, not the window.
+     * Building the window from a command line hung the whole run before it
+     * copied a single file (and this is a /target:winexe, so nothing was
+     * printed to say so). The folder build touches no control, so headless
+     * mode simply skips the UI. */
+    public static bool Headless;
+
     public ReleaseManager()
     {
+        if (Headless) return;
+
         Text = "GATA Release Manager";
         ClientSize = new Size(940, 700);   // height is recomputed from the content below
         StartPosition = FormStartPosition.CenterScreen;
