@@ -195,6 +195,14 @@
     <summary data-i18n="adv.title">Advanced</summary>
     <div class="advgrid">
       <label class="chk"><input type="checkbox" id="chkAutoJump" checked> <span data-i18n="adv.autoJump">Restart the controller automatically when done</span></label>
+
+      <!-- Way out of any corner: a controller with no software waits in update
+           mode for ever, so it can always be reached again. -->
+      <p class="muted small" data-i18n="adv.eraseHint">If a controller keeps starting its old software instead of waiting for the updater, erase that software: the controller then waits for a new one and can always be reached.</p>
+      <div class="row gap">
+        <button id="btnEraseApp" class="btn ghost" data-i18n="adv.eraseApp">Erase the controller software…</button>
+      </div>
+
       <p class="muted small" data-i18n="adv.history">Previous updates on this device:</p>
       <div id="historyBox" class="history"></div>
     </div>

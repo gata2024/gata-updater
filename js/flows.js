@@ -718,6 +718,37 @@ const Flows = {
 
   /* ------------------------------------------------- individual (advanced) */
 
+  /* Erase the controller software - the way out of any corner.
+   *
+   * A controller with no complete software waits in update mode FOR EVER
+   * (there is nothing to fall back to), so it can always be reached again.
+   * That makes this the answer to "it keeps starting the old software before
+   * I can connect": erase it once, and the board sits waiting until a new
+   * one is installed. It needs no firmware files and no internet. */
+  async runEraseApp(ctx) {
+    this.cancelRequested = false;
+    this.running = true;
+    const t0 = Date.now();
+    let ok = false;
+    try {
+      await this._acquireWakeLock();
+      const bl = await this._connectBootloader(ctx, { tries: 6, delay: 1200 });
+      Util.warn("Erasing the controller software - the controller will then wait for a new one.");
+      await bl.format(sec => ctx.onTick && ctx.onTick(sec));
+      this._ck();
+      /* Do NOT restart it: with the software gone there is nothing to start,
+       * and staying here means the next install can begin immediately. */
+      Util.ok("Controller software erased. The controller is waiting in update mode - " +
+              "install software with UPDATE whenever you are ready.");
+      try { await bl.t.close(); } catch (e) { /* ignore */ }
+      ok = true;
+    } finally {
+      this.running = false;
+      await this._releaseWakeLock();
+      this._record("action.erase", ok, (Date.now() - t0) / 1000, "-");
+    }
+  },
+
   async runSystemOnly(ctx) {
     this.cancelRequested = false;
     this.running = true;

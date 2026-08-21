@@ -71,6 +71,10 @@ const I18N = {
       "res.cloudOk.text": "The ESP32 cloud firmware is installed. The controller restarts by itself and returns to its existing software after ~15 seconds — check for the green status LED (older firmware: sky-blue); press RESET once if it does not appear.",
 
       "adv.title": "Advanced",
+      "adv.eraseApp": "Erase the controller software…",
+      "adv.eraseHint": "If a controller keeps starting its old software instead of waiting for the updater, erase that software: the controller then waits for a new one and can always be reached.",
+      "adv.eraseConfirm": "Erase the software on this controller?\n\nThe controller will stop working until you install software again — but it will WAIT for the updater instead of starting on its own, so you can always reach it.",
+      "adv.eraseDone": "Controller software erased. The controller is waiting in update mode — press UPDATE whenever you are ready to install software.",
       "adv.autoJump": "Restart the controller automatically when done",
       "adv.nextBoot": "Next system firmware to be used:",
       "btn.switch": "switch",
@@ -302,6 +306,10 @@ const I18N = {
       "res.cloudOk.text": "تم تثبيت برنامج ESP32 السحابي. ستُعيد وحدة التحكم التشغيل بنفسها وتعود إلى برنامجها الحالي بعد ~15 ثانية — تحقق من المؤشر الأخضر (الإصدارات الأقدم: أزرق سماوي)؛ اضغط RESET مرة واحدة إن لم يظهر.",
 
       "adv.title": "خيارات متقدمة",
+      "adv.eraseApp": "مسح برنامج وحدة التحكم…",
+      "adv.eraseHint": "إذا كانت وحدة التحكم تبدأ برنامجها القديم بدل انتظار المحدّث، امسح ذلك البرنامج: عندها تنتظر برنامجًا جديدًا ويمكن الوصول إليها دائمًا.",
+      "adv.eraseConfirm": "مسح البرنامج من وحدة التحكم؟\n\nستتوقف وحدة التحكم عن العمل حتى تثبّت برنامجًا من جديد — لكنها ستنتظر المحدّث بدل أن تبدأ وحدها، فيمكنك الوصول إليها دائمًا.",
+      "adv.eraseDone": "تم مسح برنامج وحدة التحكم. الوحدة تنتظر في وضع التحديث — اضغط UPDATE متى كنت جاهزًا.",
       "adv.autoJump": "إعادة تشغيل وحدة التحكم تلقائيًا عند الانتهاء",
       "adv.nextBoot": "برنامج النظام التالي الذي سيُستخدم:",
       "btn.switch": "تبديل",
@@ -533,6 +541,10 @@ const I18N = {
       "res.cloudOk.text": "ESP32 bulut yazılımı yüklendi. Kontrol ünitesi kendiliğinden yeniden başlar ve ~15 saniye içinde mevcut yazılımına döner — yeşil durum LED'ini kontrol edin (eski sürümlerde gök mavisi); görünmezse bir kez RESET'e basın.",
 
       "adv.title": "Gelişmiş",
+      "adv.eraseApp": "Kontrol ünitesi yazılımını sil…",
+      "adv.eraseHint": "Kontrol ünitesi güncelleyiciyi beklemek yerine eski yazılımını başlatıyorsa o yazılımı silin: ünite artık yeni bir yazılım bekler ve her zaman erişilebilir.",
+      "adv.eraseConfirm": "Bu kontrol ünitesindeki yazılım silinsin mi?\n\nYeniden yazılım kurana kadar ünite çalışmaz — ancak kendi başına başlamak yerine güncelleyiciyi BEKLER, böylece ona her zaman ulaşabilirsiniz.",
+      "adv.eraseDone": "Kontrol ünitesi yazılımı silindi. Ünite güncelleme modunda bekliyor — hazır olduğunuzda UPDATE'e basın.",
       "adv.autoJump": "Bittiğinde kontrol ünitesini otomatik yeniden başlat",
       "adv.nextBoot": "Bir sonraki kullanılacak sistem yazılımı:",
       "btn.switch": "değiştir",

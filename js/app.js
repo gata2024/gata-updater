@@ -868,6 +868,32 @@ const App = {
       Util.ok(I18N.t("msg.cacheCleared"));
     };
 
+    /* The escape hatch: a controller with no software waits for ever, so it
+     * can always be reached - even if it used to start its old software
+     * before the updater could connect. */
+    this.$("btnEraseApp").onclick = async () => {
+      if (this.busy) return;
+      if (!this.requireLicense()) return;
+      if (!confirm(I18N.t("adv.eraseConfirm"))) return;
+      this.setBusy(true);
+      this.$("logCard").open = true;
+      try {
+        await this.preConnect();
+        await Flows.runEraseApp({
+          demo: this.demo(),
+          ui: { step: () => {}, userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll) },
+          onDeviceLine: line => Util.dev("< " + line),
+          onTick: sec => Util.info(I18N.t("d.extEraseSec", { t: Math.round(sec) })),
+        });
+        this.showResult(true, I18N.t("adv.eraseDone"));
+      } catch (e) {
+        Util.err(e.message + (e.hint ? " — " + e.hint : ""));
+        this.showResult(false, e.message);
+      } finally {
+        this.setBusy(false);
+      }
+    };
+
     this.$("btnCopyLog").onclick = () => {
       navigator.clipboard.writeText(this.$("log").textContent).then(() => Util.ok("Log copied."));
     };
