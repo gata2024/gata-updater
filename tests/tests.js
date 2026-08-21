@@ -155,6 +155,30 @@ const T = {
         Cloud.channelize("https://x/main/manifest.json", "ksp") === "https://x/main/customers/ksp/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "danway") === "firmware/customers/danway/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "default") === "firmware/manifest.json");
+      /* A company's own app (c\<id>\) is configured with its channel manifest
+       * already spelled out; adding the folder a second time made a 404 and
+       * that app could not see its firmware list at all. */
+      this.check("cloud: a URL that already names the channel is left alone",
+        Cloud.channelize("https://x/main/customers/ksp/manifest.json", "ksp") ===
+          "https://x/main/customers/ksp/manifest.json" &&
+        Cloud.channelize("https://x/main/customers/danway/manifest.json", "danway") ===
+          "https://x/main/customers/danway/manifest.json");
+
+      /* Every company's app shares one origin, so nothing may be stored under
+       * a name another company's app would read or delete. */
+      const usrc = await (await fetch("../js/util.js", { cache: "no-store" })).text();
+      this.check("storage: keys are scoped to the channel",
+        /const store = \{/.test(usrc) && /APP_CONFIG\.channel/.test(usrc) &&
+        /prefix/.test(usrc));
+      for (const f of ["app", "cloud", "flows", "license"]) {
+        const src = await (await fetch("../js/" + f + ".js", { cache: "no-store" })).text();
+        this.check("storage: js/" + f + ".js goes through the scoped store",
+          !/\blocalStorage\./.test(src));
+      }
+      const swsrc2 = await (await fetch("../sw.js", { cache: "no-store" })).text();
+      this.check("cache: the app shell cache is named per channel, and only that channel's old caches are dropped",
+        /CACHE_PREFIX/.test(swsrc2) && /gata-uploader-" \+ CHANNEL/.test(swsrc2) &&
+        /startsWith\(CACHE_PREFIX\)/.test(swsrc2));
       const asrc = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       this.check("license: updates and the firmware list are gated on a license",
         /requireLicense\(\)/.test(asrc) && /License\.loadStored\(\)/.test(asrc) &&
@@ -171,7 +195,7 @@ const T = {
       this.check("license-file: the UI offers 'Open license file' (no pasted codes)",
         /id="licFile"/.test(hsrc) && /btnLicOpen/.test(hsrc) && !/licInput/.test(hsrc));
       this.check("license-file: the FOLDER's license wins over one remembered from another folder",
-        /MANUAL_KEY/.test(lsrc) && /const manual = localStorage\.getItem\(this\.MANUAL_KEY\)/.test(lsrc) &&
+        /MANUAL_KEY/.test(lsrc) && /const manual = store\.getItem\(this\.MANUAL_KEY\)/.test(lsrc) &&
         /if \(!manual\)/.test(lsrc));
       const bundled = await (await fetch("../gata.license", { cache: "no-store" })).text();
       const bp = await License.verify(bundled.trim());

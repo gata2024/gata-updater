@@ -42,6 +42,11 @@ const Cloud = {
    * manifest.json under the same firmware root, for every source kind. */
   channelize(url, channel) {
     if (!channel || channel === "default") return url;
+    /* A company's own copy of the app is configured with its channel manifest
+     * ALREADY spelled out, so adding the folder again produced
+     * .../customers/ksp/customers/ksp/manifest.json - a 404, and that app
+     * could not see its firmware list at all. Only add what is missing. */
+    if (url.indexOf("customers/" + channel + "/") !== -1) return url;
     return url.replace(/manifest\.json$/, "customers/" + channel + "/manifest.json");
   },
 
