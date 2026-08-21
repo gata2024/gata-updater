@@ -29,9 +29,10 @@
 <body>
 
 <h1>GATA firmware releases &amp; customer uploaders</h1>
-<p>The model: <b>one updater app</b>. Each company gets a folder copy containing <b>their license file</b>
-(<code>gata.license</code>) and <b>their offline .bin files</b>. The license carries the company name and
-automatically connects their cloud updates to <b>their channel</b>. Channels today:</p>
+<p>The model: <b>one app per company</b>. Each company gets a folder copy containing <b>their license file</b>
+(<code>gata.license</code>) and <b>their offline .bin files</b>, and — for phones — their own page at
+<code>c\&lt;channel&gt;\</code> with their own Android app. The license carries the company name and
+connects their updates to <b>their channel</b>. Channels today:</p>
 
 <table>
   <tr><th>Company</th><th>Channel</th><th>License file (already made)</th><th>Publish flag</th></tr>
@@ -54,10 +55,18 @@ Double-click it in the uploader folder and do everything with buttons — no com
       Controllers already updated are not affected.</li>
   <li><b>CHECK A FOLDER</b> — re-checks a prepared customer folder: every .bin against its
       delivery receipt <i>and</i> against the files selected above.</li>
-  <li><b>ANDROID APP (.apk)</b> — builds the installable phone app into <code>dist\gata-updater.apk</code>.
-      ONE app serves every company (each customer opens their own license file in it), and it loads the
-      published web app — so a firmware release never needs a new apk.</li>
-  <li><b>Add new company…</b> — creates their channel and their license file.</li>
+  <li><b>FIRMWARE INSIDE THE APP</b> — puts the chosen .bin files <b>inside the app</b>, so a phone can
+      install with <b>no internet</b>. General writes the site root; a company writes their own page
+      (<code>c\&lt;channel&gt;\</code>). The phone still downloads it <b>once</b>, on its first launch with
+      internet, and keeps it from then on. <b>Deploy afterwards (git push)</b> or it reaches nobody.
+      Unticking <i>Cloud module (ESP32)</i> <b>removes</b> the ESP firmware already inside that app.</li>
+  <li><b>ANDROID APP (.apk)</b> — builds <b>that company's</b> app: its own package name, its own page,
+      its own license and its own built-in firmware
+      (<code>dist\gata-updater.apk</code>, <code>dist\gata-updater-&lt;channel&gt;.apk</code>). It rebuilds
+      their page first, so <b>publish the app before pressing it</b>. A firmware release never needs a new
+      apk — the app is a thin wrapper around the page.</li>
+  <li><b>Add new company…</b> — creates their channel and their license file. Their app page is built later,
+      by ANDROID APP, once their firmware is chosen.</li>
   <li><b>Back up keys</b> — copies both keys, the keystore and all issued licenses to a USB stick.</li>
 </ul>
 It runs the very same scripts described below and prints every command it used, so you can always check or
@@ -163,6 +172,32 @@ release becomes “latest”, and it refuses to remove the last release of a cha
 <p>That creates their cloud channel (seeded from General) and writes
 <code>tools\licenses\ACME_Water.gata.license</code>. Then publish with <code>-Customer acme</code>
 and build their folder as in section 2.</p>
+
+<!-- ================================================================ -->
+<h2>4b &nbsp;Their phone app (one per company)</h2>
+<p>A company's Android app opens <b>their own page</b>, so it carries their license, their channel and
+their own built-in firmware. Build the page first, publish it, then build the app:</p>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\build_customer_site.ps1 -Id acme -Board rev6 `
+   -Controller ..\..\g_500\Debug\NPC20_mini.bin `
+   -System ..\..\USBupdaterCode_relbuild\Debug\Booster_phase.bin `
+   -EspDir ..\..\esp\.pio\build\esp32dev</code></pre>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader
+git add . ; git commit -m "ACME app" ; git push</code></pre>
+<pre><button class="copy">Copy</button><code>cd D:\emirates\saudi\makeLogicwork\gc22SramToflash\GATA_Cloud_Uploader\tools
+.\build_android_app.ps1 -Id acme -Name "ACME Water"</code></pre>
+<p><b>General is the site root</b>, not a <code>c\</code> folder — refresh its built-in firmware with
+<code>.\refresh_builtin.ps1</code> instead, and build its app with no <code>-Id</code>.</p>
+<div class="note">
+<b>Two things that are easy to get wrong.</b>
+<ul style="margin:8px 0">
+  <li>Changing the firmware inside an app reaches phones only after a <b>git push</b>, and only on their
+      next launch <b>with internet</b>. The app itself never needs rebuilding for that.</li>
+  <li>Every new package name needs an entry in <code>.well-known/assetlinks.json</code> on
+      <code>gata2024.github.io</code> (same signing key), or the app opens with a browser address bar.
+      <code>build_android_app.ps1</code> prints the exact entry to paste.</li>
+</ul>
+</div>
 
 <!-- ================================================================ -->
 <h2>5 &nbsp;Back these up (they ARE the business)</h2>
