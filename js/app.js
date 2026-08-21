@@ -28,6 +28,17 @@ const App = {
       if (this.busy) { e.preventDefault(); e.returnValue = ""; }
     });
 
+    /* The firmware stored on this device is the whole point of working with no
+     * internet, and by default Android may throw it away when storage runs
+     * short - on the day someone is standing at a pump station with no signal.
+     * Ask for it to be kept. Installed apps are normally granted this without
+     * a prompt; a refusal costs nothing, so it is never reported. */
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persisted().then(already => {
+        if (!already) return navigator.storage.persist();
+      }).catch(() => {});
+    }
+
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       // Auto-refresh on deploys: when a new service worker (new APP_CONFIG
       // version) activates, reload so the tab can never keep running old code

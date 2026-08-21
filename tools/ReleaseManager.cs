@@ -31,7 +31,11 @@ class ReleaseManager : Form
     CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog, txtDest;
     Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk, btnBuiltIn;
-    ListView lstCloud;
+    ListView lstCloud, lstFiles;
+    Label lblFiles;
+    /* The raw JSON of each listed version, kept so the file table can be filled
+     * from the selection without re-reading and re-parsing the manifest. */
+    readonly Dictionary<string, string> cloudBlocks = new Dictionary<string, string>();
     string lastBuiltFolder;
     Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
     ProgressBar bar;
@@ -60,6 +64,42 @@ class ReleaseManager : Form
                             "(tools\\publish_firmware.ps1 was not found).\n\nLooked in: " + ToolsDir,
                             "GATA Release Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
+        }
+
+        /* What is in the cloud for a company, as text - the same parsing the
+         * window uses, so it can be checked without clicking:
+         *     GATA_Release_Manager.exe /cloudlist <channel>                   */
+        if (args.Length >= 2 && args[0].Equals("/cloudlist", StringComparison.OrdinalIgnoreCase))
+        {
+            AttachConsole(-1);
+            string man = args[1] == "default"
+                ? Path.Combine(FirmwareDir, "manifest.json")
+                : Path.Combine(FirmwareDir, "customers", args[1], "manifest.json");
+            if (!File.Exists(man)) { Console.WriteLine("No manifest for channel '" + args[1] + "'"); Environment.Exit(1); }
+            string js = File.ReadAllText(man);
+            foreach (string block in VersionBlocks(js))
+            {
+                string ver = ValueOf(block, "version");
+                if (ver == null) continue;
+                long total = 0;
+                var files = FilesOf(block);
+                foreach (var f in files) total += f.Size;
+                Console.WriteLine("== " + ver + "   board " + (ValueOf(block, "board") ?? "rev5") +
+                                  "   published " + (ValueOf(block, "date") ?? "?") +
+                                  "   " + FmtSize(total) +
+                                  (block.Replace(" ", "").Contains("\"latest\":true") ? "   [LATEST]" : ""));
+                Console.WriteLine("   notes: " + (ValueOf(block, "notes") ?? ""));
+                Console.WriteLine(string.Format("   {0,-11}{1,-40}{2,-26}{3,-11}{4,-18}{5}",
+                                                "What", "Published as", "Built from", "Size", "Compiled", "Fingerprint"));
+                foreach (var f in files)
+                    Console.WriteLine(string.Format("   {0,-11}{1,-40}{2,-26}{3,-11}{4,-18}{5}",
+                        f.What, f.Name,
+                        string.IsNullOrEmpty(f.Source) ? "-" : f.Source,
+                        FmtSize(f.Size),
+                        string.IsNullOrEmpty(f.Built) ? "-" : f.Built,
+                        string.IsNullOrEmpty(f.Sha) ? "-" : f.Sha.Substring(0, Math.Min(12, f.Sha.Length))));
+            }
+            Environment.Exit(0);
         }
 
         /* Headless folder build - same code as the button, for scripting and
@@ -203,10 +243,12 @@ class ReleaseManager : Form
             FullRowSelect = true, MultiSelect = false, HideSelection = false,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
+        lstCloud.Height = 96;
         lstCloud.Columns.Add("Version", 260);
         lstCloud.Columns.Add("Board", 60);
         lstCloud.Columns.Add("Date", 90);
         lstCloud.Columns.Add("", 40);           // "now" marker for the latest
+        lstCloud.Columns.Add("Size", 80);
         lstCloud.Columns.Add("Notes", 240);
         Controls.Add(lstCloud);
 
@@ -219,7 +261,34 @@ class ReleaseManager : Form
         btnRefreshCloud = Mk(ClientSize.Width - 164, y + 36, 140, "Refresh", (s, e) => LoadCloudList());
         btnRefreshCloud.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         lstCloud.Width = ClientSize.Width - 24 - 164 - 10;
-        y += 130;
+        y += 104;
+
+        /* Every file in the selected release, spelled out: the published name,
+         * the file it was built from, its size, when it was compiled and its
+         * fingerprint. The published names are generated, so without the
+         * original name there is no way to tell which .bin a release really is. */
+        lblFiles = new Label
+        {
+            Left = 24, Top = y, Width = 600, Height = 16,
+            ForeColor = Color.FromArgb(70, 90, 120), Text = "Files in the selected version:"
+        };
+        Controls.Add(lblFiles);
+        y += 18;
+        lstFiles = new ListView
+        {
+            Left = 24, Top = y, Width = ClientSize.Width - 24 - 164 - 10, Height = 132,
+            View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+        lstFiles.Columns.Add("What", 90);
+        lstFiles.Columns.Add("Published as", 250);
+        lstFiles.Columns.Add("Built from", 190);
+        lstFiles.Columns.Add("Size", 80);
+        lstFiles.Columns.Add("Compiled", 115);
+        lstFiles.Columns.Add("Fingerprint", 110);
+        Controls.Add(lstFiles);
+        lstCloud.SelectedIndexChanged += (s, e) => ShowVersionFiles();
+        y += 140;
 
         bar = new ProgressBar { Left = 24, Top = y, Width = 820, Height = 6, Style = ProgressBarStyle.Marquee, Visible = false };
         Controls.Add(bar);
@@ -302,6 +371,8 @@ class ReleaseManager : Form
     {
         if (lstCloud == null) return;
         lstCloud.Items.Clear();
+        cloudBlocks.Clear();
+        if (lstFiles != null) lstFiles.Items.Clear();
         string channel = SelectedChannel();
         string manPath = channel == "default"
             ? Path.Combine(FirmwareDir, "manifest.json")
@@ -322,13 +393,158 @@ class ReleaseManager : Form
                 string date = ValueOf(block, "date") ?? "";
                 string notes = ValueOf(block, "notes") ?? "";
                 bool latest = block.Replace(" ", "").Contains("\"latest\":true");
-                var it = new ListViewItem(new[] { ver, board, date, latest ? "NOW" : "", notes });
+                cloudBlocks[ver] = block;
+                long total = 0;
+                foreach (var f in FilesOf(block)) total += f.Size;
+                var it = new ListViewItem(new[] { ver, board, date, latest ? "NOW" : "",
+                                                  FmtSize(total), notes });
                 if (latest) it.Font = new Font(lstCloud.Font, FontStyle.Bold);
                 lstCloud.Items.Add(it);
             }
             if (lstCloud.Items.Count > 0) lstCloud.Items[0].Selected = true;
+            ShowVersionFiles();
         }
         catch (Exception ex) { Log("Could not read the channel list: " + ex.Message); }
+    }
+
+    /* One published file, as the manifest describes it. */
+    class CloudFile
+    {
+        public string What, Url, Source, Built, Sha;
+        public long Size;
+        public string Name { get { return Url == null ? "" : Url.Substring(Url.LastIndexOf('/') + 1); } }
+    }
+
+    /* When "built" is missing (a release published before that field existed)
+     * the published copy still knows: a file copy keeps its modification time,
+     * so the .bin sitting in firmware\ carries the moment it was compiled.
+     * That is the same fact, read from the file instead of the manifest - not
+     * a guess. The original NAME cannot be recovered that way, so it stays a
+     * dash until the next publish records it. */
+    static string BuiltFromDisk(string url)
+    {
+        try
+        {
+            string rel = url.Replace("../", "").Replace('/', '\\');
+            string p = Path.Combine(FirmwareDir, rel);
+            if (File.Exists(p)) return File.GetLastWriteTime(p).ToString("yyyy-MM-dd HH:mm");
+        }
+        catch { }
+        return null;
+    }
+
+    /* The file entries of one version block, in the order they are installed.
+     * "source"/"built" only exist on releases published after they were added,
+     * so anything older falls back to the file on disk or shows a dash rather
+     * than a wrong answer. */
+    static List<CloudFile> FilesOf(string block)
+    {
+        var list = new List<CloudFile>();
+        Action<string, string> one = (key, label) =>
+        {
+            string sub = ObjectOf(block, key);
+            if (sub == null) return;
+            string url = ValueOf(sub, "url");
+            if (url == null) return;
+            long size = 0;
+            long.TryParse(NumberOf(sub, "size") ?? "0", out size);
+            list.Add(new CloudFile
+            {
+                What = label, Url = url, Size = size,
+                Sha = ValueOf(sub, "sha256"),
+                Source = ValueOf(sub, "source"),
+                Built = ValueOf(sub, "built") ?? BuiltFromDisk(url),
+            });
+        };
+        one("controller", "Controller");
+        one("system", "System");
+        string esp = ObjectOf(block, "esp");
+        if (esp != null)
+        {
+            foreach (string part in new[] { "bootloader", "partitions", "boot_app0", "firmware" })
+            {
+                string sub = ObjectOf(esp, part);
+                if (sub == null) continue;
+                long size = 0;
+                long.TryParse(NumberOf(sub, "size") ?? "0", out size);
+                list.Add(new CloudFile
+                {
+                    What = "ESP32", Url = ValueOf(sub, "url"), Size = size,
+                    Sha = ValueOf(sub, "sha256"),
+                    Source = ValueOf(sub, "source"),
+                    Built = ValueOf(sub, "built") ?? BuiltFromDisk(ValueOf(sub, "url")),
+                });
+            }
+        }
+        one("license", "Licence");
+        return list;
+    }
+
+    /* The {...} that follows "key": - depth-counted, so a nested object (esp)
+     * is returned whole instead of stopping at the first closing brace. */
+    static string ObjectOf(string block, string key)
+    {
+        int k = block.IndexOf("\"" + key + "\"");
+        if (k < 0) return null;
+        int open = block.IndexOf('{', k);
+        if (open < 0) return null;
+        int depth = 0;
+        for (int i = open; i < block.Length; i++)
+        {
+            if (block[i] == '{') depth++;
+            else if (block[i] == '}') { depth--; if (depth == 0) return block.Substring(open, i - open + 1); }
+        }
+        return null;
+    }
+
+    /* ValueOf reads STRINGS; sizes are bare numbers. */
+    static string NumberOf(string block, string key)
+    {
+        int k = block.IndexOf("\"" + key + "\"");
+        if (k < 0) return null;
+        int c = block.IndexOf(':', k);
+        if (c < 0) return null;
+        int i = c + 1;
+        while (i < block.Length && char.IsWhiteSpace(block[i])) i++;
+        int s = i;
+        while (i < block.Length && char.IsDigit(block[i])) i++;
+        return i > s ? block.Substring(s, i - s) : null;
+    }
+
+    static string FmtSize(long n)
+    {
+        if (n <= 0) return "-";
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024.0).ToString("0.0") + " KB";
+        return (n / (1024.0 * 1024.0)).ToString("0.00") + " MB";
+    }
+
+    /* Fill the file table from whichever version is selected. */
+    void ShowVersionFiles()
+    {
+        if (lstFiles == null) return;
+        lstFiles.Items.Clear();
+        string ver = null;
+        if (lstCloud != null && lstCloud.SelectedItems.Count > 0)
+            ver = lstCloud.SelectedItems[0].SubItems[0].Text;
+        if (ver == null || !cloudBlocks.ContainsKey(ver))
+        {
+            lblFiles.Text = "Files in the selected version:";
+            return;
+        }
+        lblFiles.Text = "Files in " + ver + ":";
+        foreach (var f in FilesOf(cloudBlocks[ver]))
+        {
+            lstFiles.Items.Add(new ListViewItem(new[]
+            {
+                f.What,
+                f.Name,
+                string.IsNullOrEmpty(f.Source) ? "-" : f.Source,
+                FmtSize(f.Size),
+                string.IsNullOrEmpty(f.Built) ? "-" : f.Built,
+                string.IsNullOrEmpty(f.Sha) ? "-" : f.Sha.Substring(0, Math.Min(12, f.Sha.Length)),
+            }));
+        }
     }
 
     static IEnumerable<string> VersionBlocks(string json)

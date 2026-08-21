@@ -93,7 +93,18 @@ function New-FileEntry([string]$srcPath, [string]$relUrl) {
         }
     }
     $f = Get-Item $dest
-    return [ordered]@{ url = ($script:UrlPrefix + $relUrl); size = [int]$f.Length; sha256 = (Get-Sha256 $dest) }
+    # Also record WHICH FILE this came from and WHEN IT WAS BUILT. The published
+    # name is generated (controller_<date>_<Company>_<rev>.bin), so without this
+    # there is no way to look at a release and tell which .bin on the build
+    # machine it actually is. Metadata only - sha256 is what is enforced.
+    $src = Get-Item $srcPath
+    return [ordered]@{
+        url    = ($script:UrlPrefix + $relUrl)
+        size   = [int]$f.Length
+        sha256 = (Get-Sha256 $dest)
+        source = $src.Name
+        built  = $src.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+    }
 }
 
 # ------------------------------------------------- version name (dd_MM_yy_X)

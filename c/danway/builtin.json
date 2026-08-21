@@ -11,21 +11,6 @@
                           }
                       ],
     "cloud_firmware":  [
-                           {
-                               "name":  "boot_app0.bin",
-                               "size":  8192
-                           },
-                           {
-                               "name":  "bootloader.bin",
-                               "size":  17536
-                           },
-                           {
-                               "name":  "firmware.bin",
-                               "size":  1269360
-                           },
-                           {
-                               "name":  "partitions.bin",
-                               "size":  3072
-                           }
+
                        ]
 }
