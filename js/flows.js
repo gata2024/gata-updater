@@ -357,6 +357,12 @@ const Flows = {
       });
       step("system", "done", I18N.t("d.sysDone"), 1);
       Util.ok("System firmware installed - controller rebooting into update mode.");
+      /* No rush from here: a freshly installed system firmware (1.0.12+) holds
+       * update mode open for ten minutes, and every command sent to it starts
+       * that clock again. Say so, because on a phone this step means granting
+       * USB permission and picking the device from a list, which is exactly
+       * where the old one-minute window used to run out. */
+      Util.info(I18N.t("d.windowOpen"));
       await Util.sleep(ctx.demo ? 300 : 2000);
 
       step("connect", "active", I18N.t("d.waitPort"), null);
