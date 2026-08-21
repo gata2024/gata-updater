@@ -582,13 +582,44 @@ const App = {
   /* One tap: if this browser has never been given the controller, open the
    * chooser straight away (we are inside the click). Returns the transport, or
    * null - a refusal is not fatal, the flow still has its own gates. */
+  /* Which controller, and in which state - asked as the FIRST thing after the
+   * button is pressed.
+   *
+   * It used to open the serial picker here and only ask "running, or in update
+   * mode?" much later, from inside the flow - after the download and often
+   * after the system firmware had already been written. A board sitting in
+   * BOOT mode is not a serial port, so its picker was empty, and the person
+   * waited through a download before being asked the one question that
+   * decides everything. Now the choice comes first and the download runs
+   * underneath it.
+   *
+   * Returns { serial } or { dfu }, or null when nothing was reachable. A
+   * controller that is already approved is used straight away and nothing is
+   * shown at all. */
   async preConnect() {
     if (this.demo()) return null;
     try {
       const known = await Transport.reconnect();
-      if (known) { Util.info("Controller already approved on this device - connecting."); return known; }
-      Util.info("Asking for permission to use the controller…");
-      return await Transport.request();
+      if (known) { Util.info("Controller already approved on this device - connecting."); return { serial: known }; }
+      const dfu = await DfuSeDevice.getAuthorizedDevice();
+      if (dfu) { Util.info("Controller already approved and sitting in update mode."); return { dfu }; }
+
+      /* The same two-way choice the flow used to raise later, with the same
+       * poll: whichever way the board appears - update mode or running - it
+       * continues by itself, no click needed. */
+      return await this.userGate(
+        I18N.t("gate.run.btn"),
+        I18N.t("gate.connect.text") + " " +
+          I18N.t(Transport.isAndroid() ? "gate.connect.tipMobile" : "gate.connect.tipPc"),
+        async () => ({ serial: await Transport.request() }),
+        { label: I18N.t("gate.boot.btn"), action: async () => ({ dfu: await DfuSeDevice.requestDevice() }) },
+        async () => {
+          const d = await DfuSeDevice.getAuthorizedDevice();
+          if (d) return { dfu: d };
+          const t = await Transport.reconnect();
+          if (t) return { serial: t };
+          return null;
+        });
     } catch (e) {
       if (e && (e.name === "NotFoundError" || /No (device|port) selected/i.test(e.message))) {
         await this.explainEmptyPicker();
@@ -715,11 +746,21 @@ const App = {
        * second "connect" button appearing minutes later, after the download,
        * when the gesture is long gone. Already-approved controllers skip it
        * entirely and nothing is ever shown. */
-      const preConnected = await this.preConnect();
+      /* Start fetching the software straight away, but do NOT wait for it.
+       * The slow part is a person finding a cable and pressing B+R, so the
+       * download runs underneath that: by the time they have answered, the
+       * files are usually already here. Any download error is still raised -
+       * it simply surfaces where it is awaited, below. */
+      const pkgPromise = this.getPackage(mode);
+      pkgPromise.catch(() => {});          // reported at the await below
 
-      const { pkg, version } = await this.getPackage(mode);
+      const picked = await this.preConnect();
+
+      const { pkg, version } = await pkgPromise;
       await Flows.runFullUpdate({
-        mode, pkg, version, preConnected,
+        mode, pkg, version,
+        preConnected: picked && picked.serial ? picked.serial : null,
+        preDfu: picked && picked.dfu ? picked.dfu : null,
         board: this.board(),
         firstInstall: !!(this.$("chkFirstInstall") && this.$("chkFirstInstall").checked),
         demo: this.demo(),
@@ -901,9 +942,11 @@ const App = {
       this.setBusy(true);
       this.$("logCard").open = true;
       try {
-        await this.preConnect();
+        const picked = await this.preConnect();
         await Flows.runEraseApp({
           demo: this.demo(),
+          preConnected: picked && picked.serial ? picked.serial : null,
+          preDfu: picked && picked.dfu ? picked.dfu : null,
           ui: { step: () => {}, userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll) },
           onDeviceLine: line => Util.dev("< " + line),
           onTick: sec => Util.info(I18N.t("d.extEraseSec", { t: Math.round(sec) })),

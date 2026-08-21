@@ -169,7 +169,10 @@ const Flows = {
           transport = new MockTransport({ hasEsp: ctx.demoHasEsp });
         } else {
           await this._kickPastBootSwitch(ctx);
-          transport = await Transport.reconnect();
+          /* The port the person already chose when they pressed the button -
+           * asking for it a second time is the wait this avoids. */
+          if (ctx.preConnected) { transport = ctx.preConnected; ctx.preConnected = null; }
+          if (!transport) transport = await Transport.reconnect();
           if (!transport && attempt >= o.promptAfter) {
             transport = await ctx.ui.userGate(I18N.t("gate.ser.btn"), I18N.t("gate.ser.text"),
               () => Transport.request(),
@@ -416,7 +419,14 @@ const Flows = {
     ctx.preConnected = null;
     let bootModeChosen = false;
 
-    if (!transport) {
+    /* Already answered when the button was pressed: the person said the board
+     * is in update mode and picked it there. Asking again would be the very
+     * wait this is meant to remove. */
+    if (!transport && ctx.preDfu) {
+      ctx._pickedDfu = ctx.preDfu;
+      ctx.preDfu = null;
+      bootModeChosen = true;
+    } else if (!transport) {
       // No authorized serial port. If a known DFU device is already present,
       // the board is sitting in BOOT mode - go straight to the DFU path.
       const dfuThere = await DfuSeDevice.getAuthorizedDevice();

@@ -230,6 +230,27 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ---------------- the connect choice comes FIRST, before the download */
+    {
+      const asrc2 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      const body = (asrc2.match(/async onUpdate\(mode\)[\s\S]*?\n  \},/) || [""])[0];
+      const iGate = body.indexOf("this.preConnect()");
+      const iPkg = body.indexOf("await pkgPromise");
+      const iStart = body.indexOf("this.getPackage(mode)");
+      this.check("connect: the controller is asked for BEFORE the software is waited for",
+        iGate > 0 && iPkg > iGate);
+      this.check("connect: the download starts underneath the question, not after it",
+        iStart > 0 && iStart < iGate && /pkgPromise\.catch/.test(body));
+      this.check("connect: the first question offers BOTH states (running / update mode)",
+        /preConnect\(\)[\s\S]*?gate\.boot\.btn/.test(asrc2) &&
+        /preConnect\(\)[\s\S]*?DfuSeDevice\.requestDevice\(\)/.test(asrc2));
+      this.check("connect: an already-approved controller is still used with no question",
+        /preConnect\(\)[\s\S]*?Transport\.reconnect\(\)[\s\S]*?getAuthorizedDevice\(\)/.test(asrc2));
+      const fsrc4 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      this.check("connect: a board chosen in update mode at the click is not asked for again",
+        /ctx\.preDfu/.test(fsrc4) && /_pickedDfu = ctx\.preDfu/.test(fsrc4));
+    }
+
     /* ------------- "do not jump, I was just installed", carried in the image */
     {
       const sig = "GATASESS";

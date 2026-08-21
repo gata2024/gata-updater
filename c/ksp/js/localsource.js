@@ -97,6 +97,17 @@ const LocalSource = {
       if (r.ok) receipt = await r.json();
     } catch (e) { /* folders built before receipts existed - just no proof */ }
 
+    /* The receipt says which company this firmware was prepared for. If that
+     * is not the company this app belongs to, someone put the wrong firmware
+     * in - it happened for real: the General app was left carrying another
+     * company's binaries and nothing said a word, because every file matched
+     * its own receipt perfectly. Say it out loud instead. */
+    if (receipt && receipt.company && APP_CONFIG.customerName &&
+        receipt.company.trim().toLowerCase() !== APP_CONFIG.customerName.trim().toLowerCase()) {
+      Util.warn("This firmware was prepared for " + receipt.company + ", but this app belongs to " +
+                APP_CONFIG.customerName + " - check that it is the right firmware before installing.");
+    }
+
     const m = this.matchNames(mainEntries.map(e => e.name), cloudEntries.map(e => e.name));
     const sizeOf = {};
     for (const e of mainEntries) sizeOf[e.name] = e.size;
