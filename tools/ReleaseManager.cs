@@ -846,6 +846,25 @@ class ReleaseManager : Form
         File.Copy(licFile, Path.Combine(dest, "gata.license"), true);
         log("   license: " + Path.GetFileName(licFile) + "  ->  gata.license");
 
+        /* The Android app is per company too - it opens THEIR page, with their
+         * licence, their channel and their own built-in firmware. Shipping the
+         * shared General app in a KSP folder would put a KSP customer on the
+         * General channel, so the wrong one is never copied: either theirs is
+         * here, or the folder goes out without an app and says so. */
+        string apkSrc = Path.Combine(AppDir, channel == "default"
+            ? @"dist\gata-updater.apk" : @"dist\gata-updater-" + channel + ".apk");
+        if (File.Exists(apkSrc))
+        {
+            File.Copy(apkSrc, Path.Combine(dest, "gata-updater.apk"), true);
+            log("   android app: " + Path.GetFileName(apkSrc) + "  (" +
+                File.GetLastWriteTime(apkSrc).ToString("yyyy-MM-dd HH:mm") + ")");
+        }
+        else
+        {
+            log("   ! no Android app for " + who + " yet - the folder is complete without it.");
+            log("     Build it with the ANDROID APP button while " + who + " is selected.");
+        }
+
         /* The offline files are simply the ones picked in the window. */
         int n = CopySelectedFirmware(dest, who, board, ctrlPath, sysPath, espDir, log);
         log("   firmware files put in the folder: " + n);
@@ -916,6 +935,35 @@ class ReleaseManager : Form
      *     main_firmware\system_<dd_MM_yy>_<Company>_<rev>.bin
      *     cloud_firmware\bootloader|partitions|boot_app0|firmware.bin
      * The ESP files keep their exact names - the app looks for those four. */
+    /* builtin.json = "which firmware ships inside this app". It was being
+     * copied from the source folder, so it named the SOURCE's binaries, which
+     * do not exist here - masked on a PC because GATA_Updater.exe can list the
+     * real directory, but fatal for a hosted site (a phone has no listing, so
+     * the app would find no built-in firmware at all). Write it from what is
+     * actually on disk. */
+    public static void WriteBuiltinList(string dest, Action<string> log)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("{");
+        sb.AppendLine("  \"note\": \"Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.\",");
+        string[] folders = { "main_firmware", "cloud_firmware" };
+        for (int i = 0; i < folders.Length; i++)
+        {
+            string dir = Path.Combine(dest, folders[i]);
+            var files = Directory.Exists(dir)
+                ? Directory.GetFiles(dir, "*.bin").OrderBy(f => Path.GetFileName(f)).ToArray()
+                : new string[0];
+            sb.AppendLine("  \"" + folders[i] + "\": [");
+            for (int k = 0; k < files.Length; k++)
+                sb.AppendLine("    { \"name\": \"" + Path.GetFileName(files[k]) + "\", \"size\": " +
+                              new FileInfo(files[k]).Length + " }" + (k < files.Length - 1 ? "," : ""));
+            sb.AppendLine("  ]" + (i < folders.Length - 1 ? "," : ""));
+        }
+        sb.AppendLine("}");
+        File.WriteAllText(Path.Combine(dest, "builtin.json"), sb.ToString(), new UTF8Encoding(false));
+        if (log != null) log("      builtin.json  (what the phone stores for offline use)");
+    }
+
     int CopySelectedFirmware(string dest, string company, string board,
                              string ctrlPath, string sysPath, string espDir, Action<string> log)
     {
@@ -979,6 +1027,8 @@ class ReleaseManager : Form
         receipt.Append(string.Join(",\n", lines.ToArray())).Append("\n  },\n");
         receipt.Append("  \"built_times\": {\n").Append(string.Join(",\n", built.ToArray())).Append("\n  }\n}\n");
         File.WriteAllText(Path.Combine(dest, "firmware_receipt.json"), receipt.ToString(), new UTF8Encoding(false));
+
+        WriteBuiltinList(dest, log);
 
         /* The same thing in plain words, so it can be checked by opening a
          * text file - no tools needed. */
@@ -1133,6 +1183,7 @@ class ReleaseManager : Form
     /* Internal notes and your own release tool - not part of the product. */
     static readonly string[] SkipFiles = {
         "gata.license",                     // replaced with THEIR license
+        "gata-updater.apk",                 // replaced with THEIR Android app (see below)
         "GATA_Release_Manager.exe",         // your tool, never ship it
         "HOW_TO_RELEASE.html", "OPERATIONS.md", "README.md",
         "changes_from_rev5_to_rev6.json",
@@ -1190,33 +1241,70 @@ class ReleaseManager : Form
         }) { IsBackground = true }.Start();
     }
 
-    /* Build the installable Android app. ONE apk serves every company - the
-     * customer opens their license file in it (Open license file...), exactly
-     * like the PC version, so there is nothing per-customer to build.
-     * The apk wraps the HOSTED site, so publish the app first if you changed
-     * it; firmware updates need no new apk at all. */
+    /* Build THIS COMPANY'S Android app. Each company gets its own app: its own
+     * package name, its own licence, its own cloud channel and its own
+     * built-in firmware - because their firmware is not the same firmware.
+     *
+     * Two steps, in this order:
+     *   1. c\<id>\  - the company's own copy of the web app, with its licence
+     *      and its firmware inside it. THIS is what the app opens.
+     *   2. the apk itself, which is a thin wrapper around that address.
+     * General is the site root, so it needs no step 1.
+     *
+     * Step 1 must be PUBLISHED (git push) before the app is built: the Android
+     * tooling reads the web manifest over the network. */
     void BuildApk()
     {
+        string channel = SelectedChannel();
+        string who = channel == "default" ? "General" : Pretty(channel);
+        bool isGeneral = channel == "default";
+        string siteNote = isGeneral
+            ? "General uses the site root."
+            : "It will first rebuild c\\" + channel + " (their licence + the firmware chosen above).";
+
         if (MessageBox.Show(
-                "Build the Android app (.apk)?\n\n" +
-                "One app for every company - each customer opens their own license\n" +
-                "file inside it. It loads the published web app, so make sure the\n" +
-                "app itself is up to date on GitHub.\n\n" +
-                "Takes a few minutes the first time.",
-                "Android app", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+                "Build the Android app for " + who + "?\n\n" + siteNote + "\n\n" +
+                "The app opens THAT company's page, so it carries their licence,\n" +
+                "their cloud channel and their own built-in firmware.\n\n" +
+                "IMPORTANT: publish the app (git push) BEFORE building, or the\n" +
+                "Android tools read the previous version of the page.\n\n" +
+                "Takes a few minutes.",
+                "Android app - " + who, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 
         Busy(true);
         new Thread(() =>
         {
             try
             {
-                Status("Building the Android app (this takes a few minutes)...");
                 DateTime started = DateTime.Now.AddSeconds(-5);
-                RunPs("build_android_app.ps1", "");
+                if (!isGeneral)
+                {
+                    Status("Building " + who + "'s page (c\\" + channel + ")...");
+                    Log("");
+                    Log("=== " + who + "'s own copy of the app ===");
+                    string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : (chkRev5.Checked ? "rev5" : "rev6");
+                    string a = "-Id " + channel + " -Name \"" + who + "\" -Board " + board +
+                               " -Controller \"" + txtCtrl.Text + "\"" +
+                               (chkSystem.Checked || File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
+                               (chkEsp.Checked && Directory.Exists(txtEsp.Text) ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp");
+                    RunPs("build_customer_site.ps1", a);
+                    if (!File.Exists(Path.Combine(AppDir, "c\\" + channel + "\\builtin.json")))
+                    {
+                        Status("The company page was not built - see the log.");
+                        Ask("Could not build c\\" + channel + " - see the log.\n\n" +
+                            "The apk was NOT built.", "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    Log("Publish it (git push) so the app can read it, then this build continues.");
+                }
+
+                Status("Building " + who + "'s Android app (this takes a few minutes)...");
+                RunPs("build_android_app.ps1", isGeneral ? "" : "-Id " + channel + " -Name \"" + who + "\"");
                 /* Judge by the FILE, not the exit code: the Android tools leave
                  * odd exit codes behind even on a clean build. A fresh apk on
                  * disk is the honest proof. */
-                string apk = Path.Combine(AppDir, @"dist\gata-updater.apk");
+                string apk = Path.Combine(AppDir, isGeneral
+                    ? @"dist\gata-updater.apk" : @"dist\gata-updater-" + channel + ".apk");
                 if (File.Exists(apk) && File.GetLastWriteTime(apk) >= started)
                 {
                     var fi = new FileInfo(apk);

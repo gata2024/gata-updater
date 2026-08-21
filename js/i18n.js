@@ -714,6 +714,10 @@ const I18N = {
   },
 
   init() {
+    /* Deliberately NOT channel-scoped (and this file loads before util.js, so
+     * the scoped `store` does not exist yet): which language a person reads is
+     * theirs, not a company's, and sharing it across the apps on this device
+     * is the friendlier behaviour. */
     const saved = localStorage.getItem("gata.lang");
     if (saved && this.strings[saved]) this.lang = saved;
     else {

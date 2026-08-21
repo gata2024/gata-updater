@@ -273,6 +273,44 @@ class DfuSeDevice {
   }
 
   /* Full download: erase + write + verify-free manifest ("leave" = run the firmware). */
+  /* Stamp "I have just been installed" into the system firmware before it is
+   * written. The image carries a signature followed by four spare bytes; a
+   * fresh random number there makes THIS install unlike any that ran on the
+   * board before, so the controller waits for the updater instead of starting
+   * its old software - even when the very same file is installed again.
+   *
+   * Why not send a command instead: on a fast start the controller does not
+   * bring up USB at all, so there is nothing listening to receive one. Riding
+   * inside the image needs no listening window, and only something that
+   * rewrites the flash can set it - noise on a wire cannot.
+   *
+   * System firmware without the signature (older builds) is left untouched.
+   * Returns the id that was written, or null. */
+  static stampSession(bytes) {
+    const sig = "GATASESS";
+    const at = (i) => {
+      for (let k = 0; k < sig.length; k++) if (bytes[i + k] !== sig.charCodeAt(k)) return false;
+      return true;
+    };
+    let found = -1, count = 0;
+    for (let i = 0; i + sig.length + 4 <= bytes.length; i++) {
+      if (at(i)) { if (found < 0) found = i; count++; }
+    }
+    if (found < 0) return null;                     // older system firmware
+    if (count > 1) {                                // ambiguous: never guess
+      Util.warn("System firmware carries " + count + " session marks - leaving them alone.");
+      return null;
+    }
+    const id = new Uint32Array(1);
+    crypto.getRandomValues(id);
+    let v = id[0] >>> 0;
+    if (v === 0 || v === 0xFFFFFFFF) v = 1;         // those two mean "not stamped"
+    const p = found + sig.length;
+    bytes[p] = v & 0xFF; bytes[p + 1] = (v >>> 8) & 0xFF;
+    bytes[p + 2] = (v >>> 16) & 0xFF; bytes[p + 3] = (v >>> 24) & 0xFF;
+    return v;
+  }
+
   async flash(startAddr, bytes, onProgress) {
     await this._ensureIdle();
     if (onProgress) onProgress({ phase: "erase", value: 0 });

@@ -24,11 +24,11 @@ const Cloud = {
   _db: null,
 
   manifestUrl() {
-    return localStorage.getItem("gata.manifestUrl") || this.manifestUrlCandidates()[0];
+    return store.getItem("gata.manifestUrl") || this.manifestUrlCandidates()[0];
   },
   setManifestUrl(url) {
-    if (url && url.trim()) localStorage.setItem("gata.manifestUrl", url.trim());
-    else localStorage.removeItem("gata.manifestUrl");
+    if (url && url.trim()) store.setItem("gata.manifestUrl", url.trim());
+    else store.removeItem("gata.manifestUrl");
   },
 
   /* The channel this app serves: the license decides (legacy per-customer
@@ -47,7 +47,7 @@ const Cloud = {
 
   /* Sources to try, best first. A URL set in Settings wins outright. */
   manifestUrlCandidates() {
-    const custom = localStorage.getItem("gata.manifestUrl");
+    const custom = store.getItem("gata.manifestUrl");
     if (custom && custom.trim()) return [custom.trim()];
     const ch = this.activeChannel();
     const list = [];
@@ -101,13 +101,13 @@ const Cloud = {
       if (!bytes || !sig) return;
       let bin = "";
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      localStorage.setItem(this._keptKey(), JSON.stringify({ b: btoa(bin), s: sig }));
+      store.setItem(this._keptKey(), JSON.stringify({ b: btoa(bin), s: sig }));
     } catch (e) { /* storage full or private mode - not fatal */ }
   },
 
   async _rememberedManifest() {
     let stored;
-    try { stored = JSON.parse(localStorage.getItem(this._keptKey()) || "null"); }
+    try { stored = JSON.parse(store.getItem(this._keptKey()) || "null"); }
     catch (e) { return null; }
     if (!stored || !stored.b) return null;
     const bin = atob(stored.b);
@@ -155,13 +155,13 @@ const Cloud = {
     // Rollback watch: a compromised host could serve a VALIDLY signed but
     // OLD list to push users back to vulnerable firmware - flag it.
     try {
-      const prev = localStorage.getItem("gata.lastManifestDate") || "";
+      const prev = store.getItem("gata.lastManifestDate") || "";
       const cur = String(manifest.updated || "");
       if (cur && prev && cur < prev) {
         Util.warn("SECURITY: the server offered an OLDER firmware list (" + cur +
                   " < last seen " + prev + ") - possible rollback, be careful.");
       }
-      if (cur > prev) localStorage.setItem("gata.lastManifestDate", cur);
+      if (cur > prev) store.setItem("gata.lastManifestDate", cur);
     } catch (e) { /* storage unavailable - not fatal */ }
     manifest._baseUrl = new URL(url, location.href);
     manifest._rawBytes = bytes;                 // kept for the offline fallback
@@ -470,4 +470,4 @@ const Cloud = {
 /* The alternating B1/B3 ping-pong is gone: the controller is asked to enter
  * update mode (backup register 30), and system firmware from 18.8.27 on comes
  * as ONE image. Only this cleanup of the old bookkeeping remains. */
-try { localStorage.removeItem("gata.lastBootloader"); } catch (e) { /* private mode */ }
+try { store.removeItem("gata.lastBootloader"); } catch (e) { /* private mode */ }

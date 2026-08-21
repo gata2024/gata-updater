@@ -59,7 +59,24 @@ const LocalSource = {
         cloudEntries = this._asArray(j.cloud_firmware);
         viaListing = true;
       }
-    } catch (e) { /* static host - fall through to probing */ }
+    } catch (e) { /* static host - fall through */ }
+
+    /* No local server (the phone app, or the plain website): the firmware that
+     * SHIPS WITH THE APP is listed in builtin.json. The service worker stores
+     * those files on first run, so from then on they are on the device and
+     * work with no internet at all - the same files, the same checks, just a
+     * listing a static host can serve. */
+    if (!mainEntries) {
+      try {
+        const r = await fetch(this._url("builtin.json"), { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          mainEntries = this._asArray(j.main_firmware);
+          cloudEntries = this._asArray(j.cloud_firmware);
+          viaListing = true;
+        }
+      } catch (e) { /* not published with built-in firmware - fall through */ }
+    }
 
     if (!mainEntries) {
       mainEntries = [];
@@ -72,20 +89,71 @@ const LocalSource = {
       }
     }
 
+    /* The receipt written when this folder was built: file -> SHA-256. Used
+     * to prove the .bin files here are exactly the ones that were put in. */
+    let receipt = null;
+    try {
+      const r = await fetch(this._url("firmware_receipt.json"), { cache: "no-store" });
+      if (r.ok) receipt = await r.json();
+    } catch (e) { /* folders built before receipts existed - just no proof */ }
+
     const m = this.matchNames(mainEntries.map(e => e.name), cloudEntries.map(e => e.name));
     const sizeOf = {};
     for (const e of mainEntries) sizeOf[e.name] = e.size;
+    for (const e of cloudEntries) sizeOf[e.name] = e.size;
     const found = {
       viaListing,
       system: m.system,
       mains: m.mains.map(name => ({ name, size: sizeOf[name] || 0 })),
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
+      receipt,
+      sizeOf,
+      /* When each firmware was BUILT (the compiler's timestamp, recorded when
+       * this uploader was prepared) - the useful thing to look at. */
+      builtAt: (rel) => (receipt && receipt.built_times) ? receipt.built_times[rel] : null,
     };
     Util.info("Local folder scan (" + (viaListing ? "listing" : "name probe") + "): " +
       "system=" + (found.system || "none") +
       " controller=[" + found.mains.map(x => x.name).join(", ") + "]" +
       " cloud=" + (found.espComplete ? "complete" : (m.esp.firmware ? "firmware-only" : "none")));
+    return found;
+  },
+
+  /* Firmware the user picked from the device itself (phone or PC). Same file
+   * names the uploader folder uses, so a set sent by e-mail/WhatsApp installs
+   * without any folder or internet. Files are sorted by name, exactly as the
+   * folder scan does, and validated the same way afterwards. */
+  async fromFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return null;
+    const names = files.map(f => f.name);
+    const m = this.matchNames(names, names);          // one pool: classify by name
+    const byName = {};
+    for (const f of files) byName[f.name] = f;
+
+    const read = async (name) => {
+      const f = byName[name];
+      if (!f) return null;
+      return new Uint8Array(await f.arrayBuffer());
+    };
+
+    const found = {
+      viaListing: true,
+      picked: true,
+      system: m.system,
+      mains: m.mains.map(n => ({ name: n, size: (byName[n] || {}).size || 0 })),
+      esp: m.esp,
+      espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
+      receipt: null,
+      sizeOf: files.reduce((o, f) => { o[f.name] = f.size; return o; }, {}),
+      builtAt: () => null,
+      _read: read,
+    };
+    Util.info("Picked from this device: " +
+      (found.system || "no system firmware") + ", " +
+      (found.mains.length ? found.mains.map(x => x.name).join(", ") : "no controller software") +
+      (found.esp.firmware ? ", cloud module" : ""));
     return found;
   },
 
@@ -106,9 +174,63 @@ const LocalSource = {
   /* Load the files a given action needs.
    * needs = { controller, system, esp: "no"|"optional"|"required" };
    * mainName = the chosen controller file. */
+  /* Prove a .bin is EXACTLY the file that was put into this folder.
+   *  - listed in the receipt and the hash matches -> "verified"
+   *  - listed and the hash differs -> REFUSE. The file was swapped or damaged;
+   *    installing it could brick a station, so it never reaches the device.
+   *  - no receipt (folder built before receipts, or hand-filled) -> allowed,
+   *    but the fingerprint is printed so it can be compared by eye. */
+  async _verify(bytes, relPath, receipt) {
+    const hash = await Util.sha256Hex(bytes);
+    const want = receipt && receipt.files ? receipt.files[relPath] : null;
+    if (!want) {
+      Util.warn(relPath + ": fingerprint " + hash.slice(0, 16) +
+                " (no receipt in this folder - compare it yourself if in doubt)");
+      return hash;
+    }
+    if (want.toLowerCase() !== hash.toLowerCase()) {
+      Util.err("REFUSED " + relPath + ": this file is NOT the one delivered with this uploader.");
+      Util.err("   delivered: " + want.slice(0, 16) + "     found now: " + hash.slice(0, 16));
+      const e = new UploaderError(I18N.t("err.fpMismatch", { f: relPath }), I18N.t("hint.fpMismatch"));
+      e.fatal = true;
+      throw e;
+    }
+    Util.ok(relPath + ": verified - exactly the file delivered with this uploader (" +
+            hash.slice(0, 16) + ").");
+    return hash;
+  },
+
   async load(found, needs, mainName, onProgress) {
     const report = (name, f) => { if (onProgress) onProgress(name, f); };
     const pkg = { controller: null, system: null, esp: null };
+    const receipt = found.receipt;
+
+    /* Files chosen from the device are already in hand - read them straight
+     * from the picker instead of fetching URLs that do not exist. */
+    if (found.picked) {
+      if (needs.controller) {
+        const chosen = mainName || (found.mains[0] && found.mains[0].name);
+        if (!chosen) throw new UploaderError(I18N.t("local.noMain"), I18N.t("local.hintPick"));
+        pkg.controller = await found._read(chosen);
+        report(chosen, 1);
+      }
+      if (needs.system) {
+        if (!found.system) throw new UploaderError(I18N.t("local.noBoot"), I18N.t("local.hintPick"));
+        pkg.system = await found._read(found.system);
+        report(found.system, 1);
+      }
+      if (needs.esp !== "no") {
+        if (found.esp.firmware) {
+          pkg.esp = {};
+          for (const part of ["bootloader", "partitions", "boot_app0", "firmware"]) {
+            if (found.esp[part]) pkg.esp[part] = await found._read(found.esp[part]);
+          }
+        } else if (needs.esp === "required") {
+          throw new UploaderError(I18N.t("err.noEspFiles"), I18N.t("local.hintPick"));
+        }
+      }
+      return pkg;
+    }
 
     if (needs.controller) {
       const chosen = mainName || (found.mains[0] && found.mains[0].name);
@@ -117,6 +239,7 @@ const LocalSource = {
       }
       pkg.controller = await this._fetchBin(this._url(this.MAIN_DIR + "/" + chosen),
         "Controller software " + chosen, f => report(chosen, f));
+      await this._verify(pkg.controller, this.MAIN_DIR + "/" + chosen, receipt);
     }
 
     if (needs.system) {
@@ -125,6 +248,7 @@ const LocalSource = {
       }
       pkg.system = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.system),
         "System firmware " + found.system, f => report(found.system, f));
+      await this._verify(pkg.system, this.MAIN_DIR + "/" + found.system, receipt);
     }
 
     if (needs.esp !== "no") {
@@ -134,6 +258,7 @@ const LocalSource = {
           if (found.esp[part]) {
             pkg.esp[part] = await this._fetchBin(this._url(this.CLOUD_DIR + "/" + found.esp[part]),
               "ESP32 " + part, f => report("cloud/" + part, f));
+            await this._verify(pkg.esp[part], this.CLOUD_DIR + "/" + found.esp[part], receipt);
           }
         }
       } else if (needs.esp === "required") {

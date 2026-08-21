@@ -13,7 +13,14 @@
  */
 importScripts("js/config.js");
 
-const CACHE = "gata-uploader-" + APP_CONFIG.version;
+/* Cache storage is per-ORIGIN, and every company's app shares this origin
+ * (/gata-updater/ and /gata-updater/c/<id>/). The channel has to be part of
+ * the name: without it, activating one company's app deleted every cache that
+ * was not its own - including the OTHER company's app shell and the firmware
+ * stored on the phone for offline use. */
+const CHANNEL = APP_CONFIG.channel || "default";
+const CACHE = "gata-uploader-" + CHANNEL + "-" + APP_CONFIG.version;
+const CACHE_PREFIX = "gata-uploader-" + CHANNEL + "-";
 const SHELL = [
   ".", "index.html", "css/app.css", "icon.svg", "icon-maskable.svg", "app.webmanifest",
   "icon-192.png", "icon-512.png", "icon-512-maskable.png", "icon-180.png",
@@ -59,8 +66,15 @@ self.addEventListener("install", e => {
 
 self.addEventListener("activate", e => {
   e.waitUntil(
+    /* Only OUR channel's older caches - never another company's app. The bare
+     * "gata-uploader-<version>" names written before channels existed are
+     * ours too when we are the shared app, so clean those up as well. */
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys
+        .filter(k => k !== CACHE)
+        .filter(k => k.startsWith(CACHE_PREFIX) ||
+                     (CHANNEL === "default" && /^gata-uploader-\d/.test(k)))
+        .map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

@@ -97,7 +97,7 @@ const App = {
       const text = (await file.text()).trim();
       await License.activate(text);
       this.renderLicense();
-      localStorage.removeItem("gata.lastManifestDate");   // channels have their own timeline
+      store.removeItem("gata.lastManifestDate");   // channels have their own timeline
       await this.loadManifest();
     } catch (e) {
       err.textContent = e.message;
@@ -150,7 +150,7 @@ const App = {
     if (hint && this.offlineSource === "builtin") hint.textContent = I18N.t("local.hintBuiltin");
   },
 
-  demo() { return localStorage.getItem("gata.demo") === "1"; },
+  demo() { return store.getItem("gata.demo") === "1"; },
 
   /* ------------------------------------------------------------ platform */
   platform() {
@@ -235,9 +235,9 @@ const App = {
   },
 
   /* Which board revision the user is updating (persisted per device). */
-  board() { return localStorage.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
+  board() { return store.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
   setBoard(b) {
-    localStorage.setItem("gata.board", b);
+    store.setItem("gata.board", b);
     this.selectedVersion = null;               // the old pick may not exist for this board
     this.renderBoardButtons();
     this.renderVersions();
@@ -700,7 +700,7 @@ const App = {
         board: this.board(),
         firstInstall: !!(this.$("chkFirstInstall") && this.$("chkFirstInstall").checked),
         demo: this.demo(),
-        demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
+        demoHasEsp: store.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,
         /* Forward EVERY argument: dropping `alt` hid the second choice
          * ("board is running normally") so the only way forward was BOOT
@@ -756,9 +756,9 @@ const App = {
   /* ------------------------------------------------------------- settings */
 
   applySettingsToUi() {
-    this.$("inManifestUrl").value = localStorage.getItem("gata.manifestUrl") || "";
+    this.$("inManifestUrl").value = store.getItem("gata.manifestUrl") || "";
     this.$("chkDemo").checked = this.demo();
-    this.$("chkDemoEsp").checked = localStorage.getItem("gata.demoEsp") !== "0";
+    this.$("chkDemoEsp").checked = store.getItem("gata.demoEsp") !== "0";
     this.$("demoBanner").classList.toggle("hidden", !this.demo());
     this.$("selLang").value = I18N.lang;
     this.$("selLangDlg").value = I18N.lang;
@@ -857,8 +857,8 @@ const App = {
     this.$("btnSettings").onclick = () => this.$("dlgSettings").showModal();
     this.$("btnSettingsClose").onclick = () => {
       Cloud.setManifestUrl(this.$("inManifestUrl").value);
-      localStorage.setItem("gata.demo", this.$("chkDemo").checked ? "1" : "0");
-      localStorage.setItem("gata.demoEsp", this.$("chkDemoEsp").checked ? "1" : "0");
+      store.setItem("gata.demo", this.$("chkDemo").checked ? "1" : "0");
+      store.setItem("gata.demoEsp", this.$("chkDemoEsp").checked ? "1" : "0");
       this.$("dlgSettings").close();
       this.applySettingsToUi();
       this.loadManifest();

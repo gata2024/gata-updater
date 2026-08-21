@@ -50,10 +50,107 @@ const App = {
         });
       }).catch(() => {});
     }
-    await this.loadManifest();
+
+    /* License first: it decides the firmware channel, so the manifest can
+     * only be loaded after it. Without one, the app shows the license card
+     * and waits - nothing else works until a valid license is entered. */
+    await this.detectOfflineSource();
+
+    await License.loadStored();
+    this.renderLicense();
+    if (License.licensed()) {
+      await this.loadManifest();
+    }
   },
 
-  demo() { return localStorage.getItem("gata.demo") === "1"; },
+  /* --------------------------------------------------------------- license */
+  /* Licensed is the normal state: it belongs in the footer as one quiet line,
+   * next to the version. The card only appears when the app actually needs a
+   * license file - i.e. when there is something for the user to DO. */
+  renderLicense() {
+    const lic = License.info();
+    this.$("licenseCard").classList.toggle("hidden", !!lic);
+    const line = this.$("licLine");
+    line.classList.toggle("hidden", !lic);
+    /* The company this copy belongs to is worth seeing at a glance - a badge
+     * in the header, not a card in the way. */
+    const badge = this.$("licBadge");
+    badge.classList.toggle("hidden", !lic);
+    if (lic) {
+      badge.textContent = lic.customer;
+      /* Tapping it swaps the license. On a phone there is no Settings dialog
+       * in reach mid-job, and the app auto-licenses itself from the file that
+       * ships with the site - without this a technician from another company
+       * would have no obvious way to load their own license. */
+      badge.title = I18N.t("lic.licensedTo") + " " + lic.customer + " (" + lic.channel + ")" +
+                    (lic.exp ? " " + I18N.t("lic.until", { d: lic.exp }) : "") +
+                    " — " + I18N.t("lic.change");
+      this.$("licWho").textContent = lic.customer + " (" + lic.channel + ")";
+      this.$("licExp").textContent = lic.exp ? I18N.t("lic.until", { d: lic.exp }) : "";
+    }
+  },
+
+  async onLicFile(file) {
+    const err = this.$("licError");
+    err.classList.add("hidden");
+    try {
+      const text = (await file.text()).trim();
+      await License.activate(text);
+      this.renderLicense();
+      store.removeItem("gata.lastManifestDate");   // channels have their own timeline
+      await this.loadManifest();
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove("hidden");
+    }
+  },
+
+  /* Every action that would touch a controller or download firmware runs
+   * through this gate. */
+  requireLicense() {
+    if (License.licensed()) return true;
+    Util.err(I18N.t("lic.needed"));
+    this.$("licenseCard").scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
+  },
+
+  /* The "files in the uploader folder" source only exists when the app is
+   * served BY that folder - the little local server started by
+   * CLICK_ME_START_ON_PC.bat / GATA_Updater.exe, which answers __local_list.
+   * The phone app (and the hosted web app) load the site from the internet:
+   * there is no uploader folder there, so the button would open an empty list
+   * and look broken. Offer it only where it can actually work. */
+  canUseLocal() {
+    if (location.protocol === "file:") return true;
+    return /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
+  },
+
+  /* Which firmware-without-the-internet source this copy has:
+   *   "folder"  - served by the uploader folder's own little server (a PC)
+   *   "builtin" - firmware that SHIPS WITH THE APP; the service worker stores
+   *               it on the device at first start, so a phone can update with
+   *               no signal at all
+   *   null      - neither; only the cloud (and files the user picks)
+   * The offline button is labelled for whichever one is real. */
+  async detectOfflineSource() {
+    this.offlineSource = null;
+    if (this.canUseLocal()) {
+      this.offlineSource = "folder";
+    } else {
+      try {
+        const r = await fetch("builtin.json", { cache: "no-store" });
+        if (r.ok) this.offlineSource = "builtin";
+      } catch (e) { /* no built-in firmware published with this app */ }
+    }
+    const b = this.$("btnUseLocal");
+    if (!b) return;
+    b.classList.toggle("hidden", !this.offlineSource);
+    if (this.offlineSource === "builtin") b.textContent = I18N.t("btn.useBuiltin");
+    const hint = this.$("localHint");
+    if (hint && this.offlineSource === "builtin") hint.textContent = I18N.t("local.hintBuiltin");
+  },
+
+  demo() { return store.getItem("gata.demo") === "1"; },
 
   /* ------------------------------------------------------------ platform */
   platform() {
@@ -106,6 +203,14 @@ const App = {
   /* ------------------------------------------------------------ manifest */
   async loadManifest() {
     const list = this.$("versionList");
+    if (!License.licensed()) {
+      list.innerHTML = "";
+      const div = document.createElement("div");
+      div.className = "muted";
+      div.textContent = I18N.t("lic.needed");
+      list.appendChild(div);
+      return;
+    }
     list.innerHTML = "";
     const loading = document.createElement("div");
     loading.className = "muted";
@@ -130,9 +235,9 @@ const App = {
   },
 
   /* Which board revision the user is updating (persisted per device). */
-  board() { return localStorage.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
+  board() { return store.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
   setBoard(b) {
-    localStorage.setItem("gata.board", b);
+    store.setItem("gata.board", b);
     this.selectedVersion = null;               // the old pick may not exist for this board
     this.renderBoardButtons();
     this.renderVersions();
@@ -243,9 +348,29 @@ const App = {
       return div;
     };
 
+    /* What matters when looking at a file: how big it is and WHEN it was
+     * built. (The checksum that blocks a swapped file is checked silently at
+     * install time - no need to read hashes here.) */
+    const det = (name, rel) => {
+      const size = f.sizeOf ? f.sizeOf[name] : 0;
+      const when = f.builtAt ? f.builtAt(rel) : null;
+      let s = name;
+      if (size) s += "  (" + Util.fmtBytes(size) + ")";
+      if (when) s += "   ·   " + I18N.t("local.builtAt", { d: when });
+      return s;
+    };
+    if (f.receipt) {
+      const b = document.createElement("div");
+      b.className = "lrow lok";
+      b.innerHTML = "<b>" + I18N.t("local.receipt") + "</b><span>" +
+        I18N.t("local.receiptFor", { c: f.receipt.company || "?", d: f.receipt.built || "?" }) + "</span>";
+      list.appendChild(b);
+    }
+
     // System firmware pair
     row(!!f.system, I18N.t("local.sys"),
-      f.system ? f.system : I18N.t("local.missing") + " (system*.bin)");
+      f.system ? det(f.system, "main_firmware/" + f.system)
+               : I18N.t("local.missing") + " (system*.bin)");
 
     // Controller software (radio choice when several M*.bin exist)
     if (!f.mains.length) {
@@ -254,7 +379,7 @@ const App = {
     } else if (f.mains.length === 1) {
       this.localMainSel = f.mains[0].name;
       row(true, I18N.t("local.main"),
-        f.mains[0].name + (f.mains[0].size ? " (" + Util.fmtBytes(f.mains[0].size) + ")" : ""));
+        det(f.mains[0].name, "main_firmware/" + f.mains[0].name));
     } else {
       if (!this.localMainSel || !f.mains.some(m => m.name === this.localMainSel)) {
         this.localMainSel = f.mains[0].name;
@@ -275,10 +400,26 @@ const App = {
     }
 
     // ESP32 files
-    const espDetail = f.espComplete ? I18N.t("local.espComplete")
+    /* A delivery receipt that lists no cloud-module files means this software
+     * was prepared WITHOUT one (boards with no ESP32). That is a normal state,
+     * not a missing file - showing it in red made a correct delivery look
+     * broken. Folders filled in by hand have no receipt, so those keep the
+     * "not found" wording. */
+    const receiptHasEsp = !!(f.receipt && f.receipt.files &&
+      Object.keys(f.receipt.files).some(k => k.indexOf("cloud_firmware/") === 0));
+    const espDeliberatelyNone = !f.esp.firmware && !!f.receipt && !receiptHasEsp;
+
+    let espDetail = f.espComplete ? I18N.t("local.espComplete")
       : (f.esp.firmware ? I18N.t("local.espFwOnly")
-      : I18N.t("local.missing") + " (cloud_firmware) — " + I18N.t("opt"));
-    row(!!f.esp.firmware, I18N.t("local.esp"), espDetail);
+      : (espDeliberatelyNone ? I18N.t("local.espNotIncluded")
+      : I18N.t("local.missing") + " (cloud_firmware) — " + I18N.t("opt")));
+    if (f.esp.firmware) {
+      const espSize = f.sizeOf ? f.sizeOf[f.esp.firmware] : 0;
+      const espWhen = f.builtAt ? f.builtAt("cloud_firmware/" + f.esp.firmware) : null;
+      if (espSize) espDetail += "  (" + Util.fmtBytes(espSize) + ")";
+      if (espWhen) espDetail += "   ·   " + I18N.t("local.builtAt", { d: espWhen });
+    }
+    row(!!f.esp.firmware || espDeliberatelyNone, I18N.t("local.esp"), espDetail);
 
     // The listing endpoint only exists in the current serve.ps1 - if we had
     // to fall back to name-probing on localhost, the user is running an old
@@ -298,9 +439,12 @@ const App = {
     this.$("resultBox").classList.add("hidden");
     const hiddenFor = {
       controller: ["esp"],
-      cloud: ["app"],
+      cloud: ["app", "wipe"],
       both: [],
     }[mode || "both"] || [];
+    // The memory-preparation row only exists on a first installation.
+    const chk = this.$("chkFirstInstall");
+    if (!(chk && chk.checked) && !hiddenFor.includes("wipe")) hiddenFor.push("wipe");
     document.querySelectorAll("#stepList li").forEach(li => {
       li.className = "";
       li.classList.toggle("hidden", hiddenFor.includes(li.dataset.step));
@@ -538,6 +682,7 @@ const App = {
   /* ------------------------------------------------------------ main flow */
   async onUpdate(mode) {
     if (this.busy) return;
+    if (!this.requireLicense()) return;
     this.setBusy(true);
     this.resetSteps(mode);
     try {
@@ -553,8 +698,9 @@ const App = {
       await Flows.runFullUpdate({
         mode, pkg, version, preConnected,
         board: this.board(),
+        firstInstall: !!(this.$("chkFirstInstall") && this.$("chkFirstInstall").checked),
         demo: this.demo(),
-        demoHasEsp: localStorage.getItem("gata.demoEsp") !== "0",
+        demoHasEsp: store.getItem("gata.demoEsp") !== "0",
         autoJump: this.$("chkAutoJump").checked,
         /* Forward EVERY argument: dropping `alt` hid the second choice
          * ("board is running normally") so the only way forward was BOOT
@@ -610,9 +756,9 @@ const App = {
   /* ------------------------------------------------------------- settings */
 
   applySettingsToUi() {
-    this.$("inManifestUrl").value = localStorage.getItem("gata.manifestUrl") || "";
+    this.$("inManifestUrl").value = store.getItem("gata.manifestUrl") || "";
     this.$("chkDemo").checked = this.demo();
-    this.$("chkDemoEsp").checked = localStorage.getItem("gata.demoEsp") !== "0";
+    this.$("chkDemoEsp").checked = store.getItem("gata.demoEsp") !== "0";
     this.$("demoBanner").classList.toggle("hidden", !this.demo());
     this.$("selLang").value = I18N.lang;
     this.$("selLangDlg").value = I18N.lang;
@@ -639,7 +785,13 @@ const App = {
     this.$("btnUpdBoth").onclick = () => this.onUpdate("both");
     this.$("btnCancel").onclick = () => { Flows.cancel(); Util.warn("Cancelling…"); };
     this.$("btnRefresh").onclick = () => this.loadManifest();
-    this.$("btnRescan").onclick = () => this.scanLocal();
+    /* "Scan again" belongs to the folder/built-in sources; for hand-picked
+     * files it would throw away what the user just chose, so re-open the
+     * picker instead. */
+    this.$("btnRescan").onclick = () => {
+      if (this.localFound && this.localFound.picked) pick();
+      else this.scanLocal();
+    };
 
     this.$("btnUseLocal").onclick = () => {
       this.localMode = true;
@@ -650,9 +802,53 @@ const App = {
     };
     this.$("btnUseCloud").onclick = () => {
       this.localMode = false;
+      this.localFound = null;                 // drop anything picked by hand
       this.$("localPane").classList.add("hidden");
       this.$("cloudPane").classList.remove("hidden");
       this.$("srcBadge").textContent = I18N.t("badge.cloud");
+      this.$("localHint").textContent =
+        I18N.t(this.offlineSource === "builtin" ? "local.hintBuiltin" : "local.hint");
+    };
+
+    /* Firmware files chosen from the device itself - works on a phone with no
+     * internet and no uploader folder. */
+    const pick = () => this.$("fwFiles").click();
+    this.$("btnPickFiles").onclick = pick;
+    this.$("btnPickFiles2").onclick = pick;
+    this.$("fwFiles").onchange = async e => {
+      const files = e.target.files;
+      e.target.value = "";
+      if (!files || !files.length) return;
+      const found = await LocalSource.fromFiles(files);
+      if (!found || (!found.system && !found.mains.length && !found.esp.firmware)) {
+        Util.err(I18N.t("local.pickNothing"));
+        return;
+      }
+      this.localFound = found;
+      this.localMainSel = found.mains.length ? found.mains[0].name : null;
+      this.localMode = true;
+      this.$("cloudPane").classList.add("hidden");
+      this.$("localPane").classList.remove("hidden");
+      this.$("srcBadge").textContent = I18N.t("badge.picked");
+      this.$("localHint").textContent = I18N.t("local.hintPicked");
+      this.renderLocal();
+    };
+
+    this.$("btnLicOpen").onclick = () => this.$("licFile").click();
+    this.$("licBadge").onclick = () => this.$("licFile").click();   // change it from anywhere
+    this.$("licFile").onchange = e => {
+      if (e.target.files && e.target.files[0]) this.onLicFile(e.target.files[0]);
+      e.target.value = "";
+    };
+    this.$("btnLicChange").onclick = async () => {
+      License.clear();
+      this.manifest = null;
+      this.renderVersions();
+      this.renderLicense();
+      this.$("dlgSettings").close();
+      /* A bundled gata.license would re-license the app on the next start;
+       * "change" means pick a DIFFERENT file, so open the picker now. */
+      this.$("licFile").click();
     };
 
     this.$("selLang").onchange = e => this.changeLanguage(e.target.value);
@@ -661,8 +857,8 @@ const App = {
     this.$("btnSettings").onclick = () => this.$("dlgSettings").showModal();
     this.$("btnSettingsClose").onclick = () => {
       Cloud.setManifestUrl(this.$("inManifestUrl").value);
-      localStorage.setItem("gata.demo", this.$("chkDemo").checked ? "1" : "0");
-      localStorage.setItem("gata.demoEsp", this.$("chkDemoEsp").checked ? "1" : "0");
+      store.setItem("gata.demo", this.$("chkDemo").checked ? "1" : "0");
+      store.setItem("gata.demoEsp", this.$("chkDemoEsp").checked ? "1" : "0");
       this.$("dlgSettings").close();
       this.applySettingsToUi();
       this.loadManifest();
@@ -670,6 +866,32 @@ const App = {
     this.$("btnClearCache").onclick = async () => {
       try { indexedDB.deleteDatabase("gata-firmware-cache"); Cloud._db = null; } catch (e) { /* ignore */ }
       Util.ok(I18N.t("msg.cacheCleared"));
+    };
+
+    /* The escape hatch: a controller with no software waits for ever, so it
+     * can always be reached - even if it used to start its old software
+     * before the updater could connect. */
+    this.$("btnEraseApp").onclick = async () => {
+      if (this.busy) return;
+      if (!this.requireLicense()) return;
+      if (!confirm(I18N.t("adv.eraseConfirm"))) return;
+      this.setBusy(true);
+      this.$("logCard").open = true;
+      try {
+        await this.preConnect();
+        await Flows.runEraseApp({
+          demo: this.demo(),
+          ui: { step: () => {}, userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll) },
+          onDeviceLine: line => Util.dev("< " + line),
+          onTick: sec => Util.info(I18N.t("d.extEraseSec", { t: Math.round(sec) })),
+        });
+        this.showResult(true, I18N.t("adv.eraseDone"));
+      } catch (e) {
+        Util.err(e.message + (e.hint ? " — " + e.hint : ""));
+        this.showResult(false, e.message);
+      } finally {
+        this.setBusy(false);
+      }
     };
 
     this.$("btnCopyLog").onclick = () => {

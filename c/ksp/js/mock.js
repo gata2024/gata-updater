@@ -59,8 +59,13 @@ class MockTransport {
   }
   _handle(cmd) {
     Util.dev("[demo] device received: " + cmd);
-    if (cmd === "INFO") this._reply("MCU:STM32H750VBT6\r\nEXTERNAL_FLASH:16MB@0x90000000\r\nOK\r\n");
+    if (cmd === "INFO") this._reply("MCU:STM32H750VBT6\r\nEXTERNAL_FLASH:16MB@0x90000000\r\nBL:1.0.10\r\nBOARD:rev5\r\nOK\r\n");
     else if (cmd === "FORMAT") this._reply("FORMAT_COMPLETE\r\nOK\r\n", 3500);
+    else if (cmd === "FORMAT_DATA") {
+      this._reply("DATA_FORMAT_STARTED\r\nOK\r\n");
+      this._reply("DATA_ERASE:5\r\n", 1200);
+      this._reply("DATA_FORMAT_COMPLETE\r\nOK\r\n", 2500);
+    }
     else if (cmd.startsWith("WRITE:")) {
       this._expect = parseInt(cmd.slice(6), 10); this._got = 0; this._state = "write";
       this._reply("READY_FOR_DATA:" + this._expect + "\r\nOK\r\n");

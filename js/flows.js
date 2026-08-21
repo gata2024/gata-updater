@@ -50,7 +50,7 @@ const Flows = {
 
   /* ------------------------------------------------ update history ------- */
   history() {
-    try { return JSON.parse(localStorage.getItem("gata.history") || "[]"); }
+    try { return JSON.parse(store.getItem("gata.history") || "[]"); }
     catch (e) { return []; }
   },
   _record(actionKey, ok, seconds, version) {
@@ -60,7 +60,7 @@ const Flows = {
         date: new Date().toISOString(), action: actionKey,
         ok: !!ok, seconds: Math.round(seconds), version: version || "",
       });
-      localStorage.setItem("gata.history", JSON.stringify(list.slice(0, APP_CONFIG.historyMax)));
+      store.setItem("gata.history", JSON.stringify(list.slice(0, APP_CONFIG.historyMax)));
     } catch (e) { /* history is best-effort */ }
   },
 

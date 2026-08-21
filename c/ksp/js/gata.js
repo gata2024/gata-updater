@@ -101,8 +101,14 @@ class GataBootloader {
      * nothing and keep the old handling. */
     const m = /BL:(\d+)\.(\d+)\.(\d+)/.exec(r.text);
     this.blVersion = m ? (Number(m[1]) * 65536 + Number(m[2]) * 256 + Number(m[3])) : 0;
+    /* From 1.0.9 the update firmware also probes the main-board revision
+     * (PB12/PB13 short test) and reports it - "rev5" or "rev6". Older
+     * firmware says nothing -> null, the user's board choice stands. */
+    const b = /BOARD:(rev\d+)/.exec(r.text);
+    this.boardRev = b ? b[1] : null;
     Util.ok("GATA controller answered - ready for the update." +
-            (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] + ")" : ""));
+            (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] +
+                 (b ? ", " + b[1] + " board" : "") + ")" : ""));
     return r.text;
   }
 
@@ -168,6 +174,26 @@ class GataBootloader {
     await this.send("VERIFY");
     await this.waitFor(["VERIFY_OK"], 6000, ["VERIFY_FAILED"]);
     Util.ok("Application verified.");
+  }
+
+  /* First-installation preparation of the settings & logs memory (the second
+   * external flash): full chip erase + littlefs format, done by the update
+   * firmware (1.0.10+). The erase alone runs 1-7 minutes; the device sends
+   * DATA_ERASE:<seconds> heartbeats we surface through onTick. */
+  async formatData(onTick) {
+    this.clear();
+    await this.send("FORMAT_DATA");
+    await this.waitFor(["DATA_FORMAT_STARTED"], 4000, ["UNKNOWN_COMMAND"]);
+    const start = Date.now();
+    const timer = onTick ? setInterval(() => onTick((Date.now() - start) / 1000), 1000) : null;
+    try {
+      await this.waitFor(["DATA_FORMAT_COMPLETE"], 480000,
+        ["DATA_FORMAT_ERROR:NO_CHIP", "DATA_FORMAT_ERROR:ERASE_TIMEOUT", "DATA_FORMAT_ERROR:FS"]);
+    } finally {
+      if (timer) clearInterval(timer);
+    }
+    Util.ok("Settings & logs memory prepared (" +
+            Math.round((Date.now() - start) / 1000) + " s).");
   }
 
   /* Restart the device into the application.

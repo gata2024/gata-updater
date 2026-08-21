@@ -24,22 +24,37 @@ const Cloud = {
   _db: null,
 
   manifestUrl() {
-    return localStorage.getItem("gata.manifestUrl") || this.manifestUrlCandidates()[0];
+    return store.getItem("gata.manifestUrl") || this.manifestUrlCandidates()[0];
   },
   setManifestUrl(url) {
-    if (url && url.trim()) localStorage.setItem("gata.manifestUrl", url.trim());
-    else localStorage.removeItem("gata.manifestUrl");
+    if (url && url.trim()) store.setItem("gata.manifestUrl", url.trim());
+    else store.removeItem("gata.manifestUrl");
+  },
+
+  /* The channel this app serves: the license decides (legacy per-customer
+   * packages keep their pinned config channel via License.legacyPinned()). */
+  activeChannel() {
+    if (typeof License !== "undefined" && License.licensed()) return License.channel();
+    return APP_CONFIG.channel || "default";
+  },
+
+  /* A channel's manifest lives NEXT TO the default one: customers/<id>/
+   * manifest.json under the same firmware root, for every source kind. */
+  channelize(url, channel) {
+    if (!channel || channel === "default") return url;
+    return url.replace(/manifest\.json$/, "customers/" + channel + "/manifest.json");
   },
 
   /* Sources to try, best first. A URL set in Settings wins outright. */
   manifestUrlCandidates() {
-    const custom = localStorage.getItem("gata.manifestUrl");
+    const custom = store.getItem("gata.manifestUrl");
     if (custom && custom.trim()) return [custom.trim()];
+    const ch = this.activeChannel();
     const list = [];
     const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-    if (APP_CONFIG.cloudManifestUrl) list.push(APP_CONFIG.cloudManifestUrl);
-    if (local && APP_CONFIG.proxyManifestUrl) list.push(APP_CONFIG.proxyManifestUrl);
-    if (APP_CONFIG.defaultManifestUrl) list.push(APP_CONFIG.defaultManifestUrl);
+    if (APP_CONFIG.cloudManifestUrl) list.push(this.channelize(APP_CONFIG.cloudManifestUrl, ch));
+    if (local && APP_CONFIG.proxyManifestUrl) list.push(this.channelize(APP_CONFIG.proxyManifestUrl, ch));
+    if (APP_CONFIG.defaultManifestUrl) list.push(this.channelize(APP_CONFIG.defaultManifestUrl, ch));
     return list;
   },
 
@@ -51,7 +66,9 @@ const Cloud = {
     let lastErr = null;
     for (let i = 0; i < candidates.length; i++) {
       try {
-        return await this.fetchManifestFrom(candidates[i]);
+        const m = await this.fetchManifestFrom(candidates[i]);
+        this._rememberManifest(m._rawBytes, m._rawSig);
+        return m;
       } catch (e) {
         if (e && e.fatal) throw e;                 // signature verdict: stop here
         lastErr = e;
@@ -60,7 +77,53 @@ const Cloud = {
         }
       }
     }
+
+    /* Nothing answered - no signal, or the server is down. Fall back to the
+     * list this device saw last time. It is re-checked against the pinned
+     * signing key exactly like a fresh one, and firmware already downloaded
+     * onto the device installs from its own cache, so a technician can finish
+     * a job with no internet. */
+    const kept = await this._rememberedManifest();
+    if (kept) {
+      Util.warn("No internet - using the firmware list saved on this device" +
+                (kept.updated ? " (" + kept.updated + ")" : "") + ".");
+      kept._offline = true;
+      return kept;
+    }
     throw lastErr || new UploaderError("No firmware source could be reached.");
+  },
+
+  /* --- the last good list, kept for working without internet -------------- */
+  _keptKey() { return "gata.manifest." + this.activeChannel(); },
+
+  _rememberManifest(bytes, sig) {
+    try {
+      if (!bytes || !sig) return;
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      store.setItem(this._keptKey(), JSON.stringify({ b: btoa(bin), s: sig }));
+    } catch (e) { /* storage full or private mode - not fatal */ }
+  },
+
+  async _rememberedManifest() {
+    let stored;
+    try { stored = JSON.parse(store.getItem(this._keptKey()) || "null"); }
+    catch (e) { return null; }
+    if (!stored || !stored.b) return null;
+    const bin = atob(stored.b);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (APP_CONFIG.signingPublicKey) {
+      const sigBytes = Uint8Array.from(atob(stored.s), c => c.charCodeAt(0));
+      const ok = await this.verifySignedBytes(bytes, sigBytes, APP_CONFIG.signingPublicKey);
+      if (!ok) { Util.err("The saved firmware list failed its signature check - ignoring it."); return null; }
+    }
+    let m;
+    try { m = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { return null; }
+    try { this.validateManifest(m); this._requireOwnChannel(m, "saved list"); }
+    catch (e) { return null; }
+    m._baseUrl = new URL(this.manifestUrlCandidates()[0], location.href);
+    return m;
   },
 
   async fetchManifestFrom(url) {
@@ -92,15 +155,17 @@ const Cloud = {
     // Rollback watch: a compromised host could serve a VALIDLY signed but
     // OLD list to push users back to vulnerable firmware - flag it.
     try {
-      const prev = localStorage.getItem("gata.lastManifestDate") || "";
+      const prev = store.getItem("gata.lastManifestDate") || "";
       const cur = String(manifest.updated || "");
       if (cur && prev && cur < prev) {
         Util.warn("SECURITY: the server offered an OLDER firmware list (" + cur +
                   " < last seen " + prev + ") - possible rollback, be careful.");
       }
-      if (cur > prev) localStorage.setItem("gata.lastManifestDate", cur);
+      if (cur > prev) store.setItem("gata.lastManifestDate", cur);
     } catch (e) { /* storage unavailable - not fatal */ }
     manifest._baseUrl = new URL(url, location.href);
+    manifest._rawBytes = bytes;                 // kept for the offline fallback
+    manifest._rawSig = this._lastSigB64 || null;
     Util.ok("Firmware list loaded: " + manifest.versions.length + " version(s) available.");
     return manifest;
   },
@@ -119,8 +184,13 @@ const Cloud = {
       throw e;
     }
     let sig = null;
-    try { sig = Uint8Array.from(atob((await res.text()).trim()), c => c.charCodeAt(0)); }
+    let sigB64 = null;
+    try {
+      sigB64 = (await res.text()).trim();
+      sig = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0));
+    }
     catch (e) { /* malformed base64 -> invalid */ }
+    this._lastSigB64 = sigB64;      // kept so the list can be saved for offline use
     const ok = sig && sig.length >= 64 &&
       await this.verifySignedBytes(bytes, sig, APP_CONFIG.signingPublicKey);
     if (!ok) {
@@ -132,12 +202,13 @@ const Cloud = {
     Util.ok("Firmware list signature verified (ECDSA P-256).");
   },
 
-  /* This copy of the app belongs to one customer channel; the channel id is
-   * part of the SIGNED manifest, so a mixed-up or swapped URL cannot feed a
-   * customer another customer's firmware. Older unsigned-era lists carry no
-   * channel field - those are accepted only by the shared "default" app. */
+  /* This app serves one customer channel (from the LICENSE, or pinned in a
+   * legacy package); the channel id is part of the SIGNED manifest, so a
+   * mixed-up or swapped URL cannot feed a customer another customer's
+   * firmware. Older unsigned-era lists carry no channel field - those are
+   * accepted only on the shared "default" channel. */
   _requireOwnChannel(manifest, url) {
-    const mine = (APP_CONFIG.channel || "default");
+    const mine = this.activeChannel();
     const theirs = (manifest.channel || "default");
     if (mine === theirs) return;
     Util.err(I18N.t("err.channel", { mine: mine, theirs: theirs }) + " (" + url + ")");
@@ -335,6 +406,37 @@ const Cloud = {
     const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
     const pkg = { controller: null, system: null, esp: null };
 
+    /* Package license: versions published with a .lic file are BOUND to a
+     * channel and to their exact controller binary (by hash). The token must
+     * verify against the pinned license key AND match this app's customer
+     * license - so a package copied out of another customer's channel refuses
+     * to install here. Versions without one (published before licensing) are
+     * accepted as legacy. */
+    if (ver.license && ver.license.url) {
+      const licBytes = await this.download(manifest, ver.license, "Package license", () => {});
+      let lic;
+      try {
+        lic = await License.verifyPackage(new TextDecoder().decode(licBytes));
+      } catch (e) {
+        const err = new UploaderError(I18N.t("err.pkgLic", { v: ver.version }) + " (" + e.message + ")",
+          I18N.t("hint.pkgLic"));
+        err.fatal = true;
+        throw err;
+      }
+      const ctrl = this.controllerEntry(ver);
+      const boundOk =
+        lic.version === ver.version &&
+        (lic.channel || "default") === this.activeChannel() &&
+        (!ctrl || !ctrl.sha256 || !lic.controller ||
+          lic.controller.toLowerCase() === ctrl.sha256.toLowerCase());
+      if (!boundOk) {
+        const err = new UploaderError(I18N.t("err.pkgLic", { v: ver.version }), I18N.t("hint.pkgLic"));
+        err.fatal = true;
+        throw err;
+      }
+      Util.ok("Package license verified: " + ver.version + " is licensed for this channel.");
+    }
+
     if (n.controller) {
       const entry = this.controllerEntry(ver);
       if (!entry || !entry.url) throw new UploaderError("This version has no controller software file.");
@@ -368,4 +470,4 @@ const Cloud = {
 /* The alternating B1/B3 ping-pong is gone: the controller is asked to enter
  * update mode (backup register 30), and system firmware from 18.8.27 on comes
  * as ONE image. Only this cleanup of the old bookkeeping remains. */
-try { localStorage.removeItem("gata.lastBootloader"); } catch (e) { /* private mode */ }
+try { store.removeItem("gata.lastBootloader"); } catch (e) { /* private mode */ }

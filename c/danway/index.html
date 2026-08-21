@@ -23,6 +23,7 @@
     </div>
   </div>
   <div class="topactions">
+    <span id="licBadge" class="licbadge hidden" title=""></span>
     <select id="selLang" class="langsel" aria-label="Language">
       <option value="en">EN</option>
       <option value="ar">ع</option>
@@ -37,6 +38,26 @@
 <main>
   <div id="platformBanner" class="banner hidden" role="note"></div>
   <div id="demoBanner" class="banner demo hidden" data-i18n="banner.demo">DEMO MODE — no real device is used. Turn it off under Settings.</div>
+
+  <!-- LICENSE : one app for everyone, the license picks the firmware channel -->
+  <section id="licenseCard" class="card hidden">
+    <div class="cardhead">
+      <span class="stepnum">🔑</span>
+      <h2 data-i18n="lic.title">License</h2>
+    </div>
+    <div id="licEnter">
+      <p class="muted" data-i18n="lic.enterHint">No license found. The license file normally comes inside the uploader folder (gata.license) — if you received it separately, open it here. It decides which software this updater installs. One time only — it stays on this device.</p>
+      <!-- no accept filter on purpose: Android file pickers grey out extensions
+           they do not recognise (.license/.gata), which made the file
+           impossible to choose on a phone. The token inside is verified
+           anyway, so anything the user picks is checked properly. -->
+      <input type="file" id="licFile" hidden>
+      <div class="row gap">
+        <button id="btnLicOpen" class="btn prime" data-i18n="lic.open">Open license file…</button>
+      </div>
+      <p id="licError" class="err small hidden"></p>
+    </div>
+  </section>
 
   <!-- STEP 1 : firmware source -->
   <section class="card">
@@ -58,16 +79,21 @@
       <div class="row gap wrap">
         <button id="btnRefresh" class="btn ghost" data-i18n="btn.refresh">Refresh list</button>
         <button id="btnUseLocal" class="btn ghost" data-i18n="btn.useLocal">Use files from this device instead</button>
+        <button id="btnPickFiles" class="btn ghost" data-i18n="btn.pickFiles">Choose firmware files…</button>
       </div>
     </div>
     <div id="localPane" class="hidden">
-      <p class="muted" data-i18n="local.hint">Files found in the main_firmware and cloud_firmware folders inside the uploader:</p>
+      <p id="localHint" class="muted" data-i18n="local.hint">Files found in the main_firmware and cloud_firmware folders inside the uploader:</p>
       <div id="localList" class="locallist"></div>
       <div class="row gap wrap">
         <button id="btnRescan" class="btn ghost" data-i18n="local.rescan">Scan again</button>
+        <button id="btnPickFiles2" class="btn ghost" data-i18n="btn.pickFiles">Choose firmware files…</button>
         <button id="btnUseCloud" class="btn ghost" data-i18n="btn.useCloud">Back to cloud versions</button>
       </div>
     </div>
+    <!-- multi-select: the .bin files can be sent to a phone and installed with
+         no internet and no uploader folder -->
+    <input type="file" id="fwFiles" multiple hidden>
   </section>
 
   <!-- STEP 2 : prepare board -->
@@ -97,6 +123,12 @@
       <span class="stepnum">3</span>
       <h2 data-i18n="s3.title">Update</h2>
     </div>
+
+    <label class="firstinstall">
+      <input type="checkbox" id="chkFirstInstall">
+      <span><b data-i18n="opt.firstInstall">First installation on this controller</b>
+      <small data-i18n="opt.firstInstallDesc">Also prepares the settings &amp; logs memory (full erase + format) so the controller starts clean. Do not use on a controller that is already in service — its settings and logs would be lost.</small></span>
+    </label>
 
     <div class="actions">
       <button id="btnUpdateNow" class="btn action prime one">
@@ -130,7 +162,7 @@
       <p id="gateText"></p>
       <div class="row center gap wrap">
         <button id="gateBtn" class="btn primary"></button>
-        <button id="gateBtnAlt" class="btn ghost hidden"></button>
+        <button id="gateBtnAlt" class="btn primary hidden"></button>
       </div>
       <details class="picky bootguide">
         <summary data-i18n="boot.title">Not in the list? Put the controller in update mode</summary>
@@ -149,6 +181,7 @@
       <li data-step="download"><span class="dot"></span><div><b data-i18n="st.download">Download software</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="system"><span class="dot"></span><div><b data-i18n="st.system">System firmware</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="connect"><span class="dot"></span><div><b data-i18n="st.connect">Connect</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="wipe"><span class="dot"></span><div><b data-i18n="st.wipe">Memory preparation</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="esp"><span class="dot"></span><div><b data-i18n="st.esp">ESP32 module</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="app"><span class="dot"></span><div><b data-i18n="st.app">Controller software</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="finish"><span class="dot"></span><div><b data-i18n="st.finish">Finish</b><small></small><div class="bar"><i></i></div></div></li>
@@ -162,6 +195,14 @@
     <summary data-i18n="adv.title">Advanced</summary>
     <div class="advgrid">
       <label class="chk"><input type="checkbox" id="chkAutoJump" checked> <span data-i18n="adv.autoJump">Restart the controller automatically when done</span></label>
+
+      <!-- Way out of any corner: a controller with no software waits in update
+           mode for ever, so it can always be reached again. -->
+      <p class="muted small" data-i18n="adv.eraseHint">If a controller keeps starting its old software instead of waiting for the updater, erase that software: the controller then waits for a new one and can always be reached.</p>
+      <div class="row gap">
+        <button id="btnEraseApp" class="btn ghost" data-i18n="adv.eraseApp">Erase the controller software…</button>
+      </div>
+
       <p class="muted small" data-i18n="adv.history">Previous updates on this device:</p>
       <div id="historyBox" class="history"></div>
     </div>
@@ -181,6 +222,8 @@
   <footer class="foot">
     <span id="verInfo">GATA Cloud Uploader</span> ·
     <span id="capsInfo"></span>
+    <span id="licLine" class="hidden"> · <span data-i18n="lic.licensedTo">Licensed to</span>
+      <b id="licWho"></b> <span id="licExp"></span></span>
   </footer>
 </main>
 
@@ -202,6 +245,9 @@
   <div class="row gap">
     <button id="btnClearCache" class="btn ghost" data-i18n="btn.clearCache">Clear downloaded firmware cache</button>
   </div>
+  <div class="row gap">
+    <button id="btnLicChange" class="btn ghost" data-i18n="lic.change">Change license</button>
+  </div>
   <div class="row gap right">
     <button id="btnSettingsClose" class="btn primary" data-i18n="btn.done">Done</button>
   </div>
@@ -210,6 +256,7 @@
 <script src="js/config.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/util.js"></script>
+<script src="js/license.js"></script>
 <script src="js/validate.js"></script>
 <script src="js/dfuse.js"></script>
 <script src="js/transport.js"></script>

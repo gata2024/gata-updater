@@ -50,7 +50,7 @@ const Flows = {
 
   /* ------------------------------------------------ update history ------- */
   history() {
-    try { return JSON.parse(localStorage.getItem("gata.history") || "[]"); }
+    try { return JSON.parse(store.getItem("gata.history") || "[]"); }
     catch (e) { return []; }
   },
   _record(actionKey, ok, seconds, version) {
@@ -60,7 +60,7 @@ const Flows = {
         date: new Date().toISOString(), action: actionKey,
         ok: !!ok, seconds: Math.round(seconds), version: version || "",
       });
-      localStorage.setItem("gata.history", JSON.stringify(list.slice(0, APP_CONFIG.historyMax)));
+      store.setItem("gata.history", JSON.stringify(list.slice(0, APP_CONFIG.historyMax)));
     } catch (e) { /* history is best-effort */ }
   },
 
@@ -345,7 +345,14 @@ const Flows = {
     let lastErr = null;
     for (let cycle = 0; cycle < maxCycles; cycle++) {
       this._ck();
-      const image = ctx.pkg.system;
+      /* Copy first: the package may be installed again later, and the stamp
+       * must be fresh every time. */
+      const image = Uint8Array.from(ctx.pkg.system);
+      const stamp = DfuSeDevice.stampSession(image);
+      if (stamp !== null) {
+        Util.info("This install is marked so the controller waits for the updater " +
+                  "instead of starting its old software.");
+      }
       step("system", "active",
         I18N.t("d.sysFlashing", { s: Util.fmtBytes(image.length) }), 0);
       const dfu = await this._openDfu(ctx);
@@ -357,6 +364,12 @@ const Flows = {
       });
       step("system", "done", I18N.t("d.sysDone"), 1);
       Util.ok("System firmware installed - controller rebooting into update mode.");
+      /* No rush from here: a freshly installed system firmware (1.0.12+) holds
+       * update mode open for ten minutes, and every command sent to it starts
+       * that clock again. Say so, because on a phone this step means granting
+       * USB permission and picking the device from a list, which is exactly
+       * where the old one-minute window used to run out. */
+      Util.info(I18N.t("d.windowOpen"));
       await Util.sleep(ctx.demo ? 300 : 2000);
 
       step("connect", "active", I18N.t("d.waitPort"), null);
@@ -483,12 +496,18 @@ const Flows = {
        * update mode (enterBootloader); BOOT-button DFU is the fallback. */
       let bl = await this._establishUpdateMode(ctx, step);
 
-      /* Rev 6 boards: the ESP32 moved to another UART (USART3/PD8-PD9) that
-       * the installed system firmware never initialises - its frames exit on
-       * pins now wired to the microSD pad. Harmless but dead, so say so
-       * instead of timing out. Lift this gate when the system firmware gains
-       * the rev 6 ESP path. */
-      const espPossible = ctx.board !== "rev6";
+      /* Rev 6 boards: the ESP32 moved to another UART (USART3/PD8-PD9).
+       * System firmware 1.0.9+ probes the board itself and drives the right
+       * pins on both revisions - so the gate is decided by what is actually
+       * INSTALLED on the board, not by the board alone. Older firmware on a
+       * rev 6 board would talk to the microSD pads: harmless but dead, so
+       * say so instead of timing out. */
+      if (bl.boardRev && bl.boardRev !== ctx.board) {
+        Util.warn("The controller reports a " + bl.boardRev + " board but '" +
+                  ctx.board + "' is selected - trusting the controller.");
+      }
+      const espPossible = (bl.blVersion || 0) >= 0x00010009 ||
+                          (bl.boardRev || ctx.board) !== "rev6";
 
       /* =================================================== mode: cloud ==== */
       if (mode === "cloud") {
@@ -533,6 +552,27 @@ const Flows = {
       this._ck();
       step("app", "active", I18N.t("d.extErased"), 0.15);
 
+      /* First installation: also prepare the settings & logs memory (the
+       * second external flash) - full erase + littlefs format, mirroring the
+       * HMI's factory reset - so the controller boots clean on the first try
+       * instead of limping through its mount-failure recovery. Deliberately
+       * AFTER the app-flash erase: with no valid application present the
+       * update window cannot close mid-way through the minutes-long erase.
+       * This is independent of HOW update mode was reached (self-commanded
+       * or BOOT buttons) - a board can need BOOT mode without being new, and
+       * a new board usually IS in BOOT mode, but neither implies the other. */
+      if (ctx.firstInstall) {
+        if ((bl.blVersion || 0) >= 0x0001000A) {
+          step("wipe", "active", I18N.t("d.wipeStart"), null);
+          await bl.formatData(sec => step("wipe", "active",
+            I18N.t("d.wipeSec", { t: Math.round(sec) }), null));
+          this._ck();
+          step("wipe", "done", I18N.t("d.wipeDone"), 1);
+        } else {
+          step("wipe", "warn", I18N.t("d.wipeOld"), 1);
+        }
+      }
+
       /* ESP32 phase (mode "both" only) - BETWEEN erase and app install, and
        * the app region stays erased throughout it, which makes the ordering
        * bulletproof: with no valid app the bootloader never auto-exits, so
@@ -548,8 +588,16 @@ const Flows = {
        * a board without an ESP leaves the probe UART armed and a delayed
        * interrupt storm kills the stream ~13 s later at the same byte - a
        * reset fully defuses it (nothing re-arms the UART on the next boot). */
-      if (mode === "both" && !espPossible) {
-        step("esp", "done", I18N.t("d.espRev6"), 1);
+      if (mode === "both" && !ctx.pkg.esp) {
+        /* This release deliberately carries no cloud-module firmware (boards
+         * without an ESP32). Nothing to install, and no reason to probe for a
+         * module we could not update anyway - say so and move on. */
+        step("esp", "done", I18N.t("d.espNotIncluded"), 1);
+      } else if (mode === "both" && !espPossible) {
+        /* warn, not done - a green check here read as "cloud module updated"
+         * when it was actually skipped (needs the one-time BOOT-mode install
+         * of system firmware 1.0.9). */
+        step("esp", "warn", I18N.t("d.espRev6") + " " + I18N.t("hint.espRev6"), 1);
       } else if (mode === "both") {
         step("esp", "active", I18N.t("d.espCheck"), null);
         const hasEsp = await bl.espDetect(true);
@@ -677,19 +725,53 @@ const Flows = {
 
   /* ------------------------------------------------- individual (advanced) */
 
+  /* Erase the controller software - the way out of any corner.
+   *
+   * A controller with no complete software waits in update mode FOR EVER
+   * (there is nothing to fall back to), so it can always be reached again.
+   * That makes this the answer to "it keeps starting the old software before
+   * I can connect": erase it once, and the board sits waiting until a new
+   * one is installed. It needs no firmware files and no internet. */
+  async runEraseApp(ctx) {
+    this.cancelRequested = false;
+    this.running = true;
+    const t0 = Date.now();
+    let ok = false;
+    try {
+      await this._acquireWakeLock();
+      const bl = await this._connectBootloader(ctx, { tries: 6, delay: 1200 });
+      Util.warn("Erasing the controller software - the controller will then wait for a new one.");
+      await bl.format(sec => ctx.onTick && ctx.onTick(sec));
+      this._ck();
+      /* Do NOT restart it: with the software gone there is nothing to start,
+       * and staying here means the next install can begin immediately. */
+      Util.ok("Controller software erased. The controller is waiting in update mode - " +
+              "install software with UPDATE whenever you are ready.");
+      try { await bl.t.close(); } catch (e) { /* ignore */ }
+      ok = true;
+    } finally {
+      this.running = false;
+      await this._releaseWakeLock();
+      this._record("action.erase", ok, (Date.now() - t0) / 1000, "-");
+    }
+  },
+
   async runSystemOnly(ctx) {
     this.cancelRequested = false;
     this.running = true;
     const t0 = Date.now();
     let ok = false;
     try {
-      const image = ctx.pkg.system;
-      if (!image) throw new UploaderError("The system firmware file is not loaded.",
+      if (!ctx.pkg.system) throw new UploaderError("The system firmware file is not loaded.",
         I18N.t("hint.pickBoth"));
-      if (!Validate.isValidSystem(image)) {
+      if (!Validate.isValidSystem(ctx.pkg.system)) {
         throw new UploaderError(I18N.t("val.boot", { f: "system firmware" }));
       }
+      /* Work on a copy: the stamp must be fresh on every install, and the
+       * downloaded package may be installed more than once. */
+      const image = Uint8Array.from(ctx.pkg.system);
       await this._acquireWakeLock();
+      DfuSeDevice.stampSession(image);   // same mark as the full update
       const dfu = await this._openDfu(ctx);
       await dfu.flash(APP_CONFIG.systemFlashAddr, image, p =>
         ctx.onProgress && ctx.onProgress(p.phase, p.value));
@@ -738,6 +820,11 @@ const Flows = {
       }
       await this._acquireWakeLock();
       const bl = await this._connectBootloader(ctx, { tries: 3 });
+      /* Same rev 6 rule as the main flows: only system firmware 1.0.9+
+       * reaches the ESP32 on a rev 6 board (USART3/PD8-PD9). */
+      if ((bl.blVersion || 0) < 0x00010009 && (bl.boardRev || ctx.board) === "rev6") {
+        throw new UploaderError(I18N.t("err.espRev6"), I18N.t("hint.espRev6"));
+      }
       const hasEsp = await bl.espDetect(true);
       if (!hasEsp) throw new UploaderError(I18N.t("err.noEsp"), I18N.t("hint.noEsp"));
       let image, addr;

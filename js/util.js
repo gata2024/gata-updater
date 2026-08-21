@@ -1,6 +1,25 @@
 /* GATA Cloud Uploader - small shared utilities */
 "use strict";
 
+/* Every company's app lives on the SAME origin - the shared one at
+ * /gata-updater/ and one per company at /gata-updater/c/<id>/ - and
+ * localStorage is per-ORIGIN, not per-folder. An unprefixed key is therefore
+ * literally the same key in all of them, which is how one company's manifest
+ * override or license could surface inside another company's app. Every key
+ * is scoped to the channel instead; "gata.x" and "gata.ksp.x" cannot collide.
+ *
+ * Call sites keep writing the familiar "gata.something" names - the prefix is
+ * applied here, in one place. */
+const store = {
+  prefix: "gata." + ((typeof APP_CONFIG !== "undefined" &&
+                      APP_CONFIG.channel && APP_CONFIG.channel !== "default")
+                       ? APP_CONFIG.channel + "." : ""),
+  key(k) { return this.prefix + String(k).replace(/^gata\./, ""); },
+  getItem(k) { try { return localStorage.getItem(this.key(k)); } catch (e) { return null; } },
+  setItem(k, v) { try { localStorage.setItem(this.key(k), v); } catch (e) { /* private mode / full */ } },
+  removeItem(k) { try { localStorage.removeItem(this.key(k)); } catch (e) { } },
+};
+
 const Util = {
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
 
