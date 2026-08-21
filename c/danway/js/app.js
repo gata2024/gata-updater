@@ -34,6 +34,18 @@ const App = {
       // - unless an update is in progress; then reload after it finishes.
       navigator.serviceWorker.register("sw.js").then(reg => {
         reg.update().catch(() => {});
+        /* Ask the worker to re-check the firmware stored on this device.
+         * Without this, replacing the firmware inside the app reached nobody:
+         * the binaries are cached at install, and a deploy that only changes
+         * a .bin leaves sw.js byte-identical, so no install/activate ever runs
+         * again and the phone keeps serving the copy it stored on day one. */
+        const refresh = () => {
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: "refresh-builtin" });
+          }
+        };
+        refresh();
+        navigator.serviceWorker.addEventListener("controllerchange", refresh);
         reg.addEventListener("updatefound", () => {
           const nw = reg.installing;
           if (!nw) return;

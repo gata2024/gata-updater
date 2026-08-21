@@ -1,0 +1,20 @@
+GATA firmware delivery - what is inside this uploader
+=====================================================
+Company : Danway
+Board   : rev5
+Prepared: 2026-08-21 08:52
+
+These are the exact firmware files that were put in. The updater
+re-checks every one of them before installing and REFUSES to install
+a file whose fingerprint does not match this list.
+
+  main_firmware/controller_21_08_26_Danway_rev5.bin
+      fingerprint 1991365ab4a446290b42179e966714f1464ccf67d5844f9cb897dc9c53363297
+      built       2026-07-12 02:05
+  main_firmware/system_21_08_26_Danway_rev5.bin
+      fingerprint 8548540139623b8825ffe2e500b483e3d1dbeaab2567e815d8dd29f7682fa71f
+      built       2026-08-21 05:17
+
+Source files these came from (on the release PC):
+  controller : D:\emirates\saudi\makeLogicwork\gc22SramToflash\M_Danway_12_7_26.bin
+  system     : D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin

@@ -1,18 +1,18 @@
 {
-    "company":  "Danway",
-    "board":  "rev5",
-    "built":  "2026-08-21 08:59",
+    "company":  "General",
+    "board":  "rev6",
+    "built":  "2026-08-21 08:58",
     "files":  {
-                  "main_firmware/controller_21_08_26_Danway_rev5.bin":  "1991365ab4a446290b42179e966714f1464ccf67d5844f9cb897dc9c53363297",
-                  "main_firmware/system_21_08_26_Danway_rev5.bin":  "8548540139623b8825ffe2e500b483e3d1dbeaab2567e815d8dd29f7682fa71f",
+                  "main_firmware/controller_21_08_26_General_rev6.bin":  "b164c2b8efbf003a099c7f4fff98de402ec6acded3cde224857eea0bf8565c5a",
+                  "main_firmware/system_21_08_26_General_rev6.bin":  "8548540139623b8825ffe2e500b483e3d1dbeaab2567e815d8dd29f7682fa71f",
                   "cloud_firmware/bootloader.bin":  "095bbcc7357184f68144ab40b152e2f6d68fc9d07f642c17c7888c533ddc67d3",
                   "cloud_firmware/partitions.bin":  "aaae2888c5a6a348004b5b436f47abb25ae32e72d9003902955a998eda723edd",
                   "cloud_firmware/boot_app0.bin":  "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
                   "cloud_firmware/firmware.bin":  "8683fa958804b495153d8563168d05b9209cc2262b4539663d6070e58fdd1623"
               },
     "built_times":  {
-                        "main_firmware/controller_21_08_26_Danway_rev5.bin":  "2026-07-12 02:05",
-                        "main_firmware/system_21_08_26_Danway_rev5.bin":  "2026-08-21 05:17",
+                        "main_firmware/controller_21_08_26_General_rev6.bin":  "2026-08-20 06:53",
+                        "main_firmware/system_21_08_26_General_rev6.bin":  "2026-08-21 05:17",
                         "cloud_firmware/bootloader.bin":  "2026-08-19 07:39",
                         "cloud_firmware/partitions.bin":  "2026-08-19 07:39",
                         "cloud_firmware/boot_app0.bin":  "2026-08-19 07:41",

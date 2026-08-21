@@ -1336,9 +1336,56 @@ class ReleaseManager : Form
      * Deploy the app afterwards for phones to pick it up. */
     void RefreshBuiltIn()
     {
-        if (Ask("Put the firmware chosen above INSIDE the app?\n\n" +
-                "Phones that install the app then carry this firmware and can\n" +
-                "update a controller with no internet.\n\n" +
+        string chan = SelectedChannel();
+        string whoSel = chan == "default" ? "General" : Pretty(chan);
+
+        /* Each company has its OWN app now (c\<id>\), so the firmware has to go
+         * into that company's copy. Writing it into the site root - which is
+         * the General app - would have put, say, Danway's firmware inside the
+         * app every General customer downloads, under a Danway name. */
+        if (chan != "default")
+        {
+            if (Ask("Put the firmware chosen above inside " + whoSel + "'s app?\n\n" +
+                    "It goes into c\\" + chan + " - " + whoSel + "'s own copy of the app,\n" +
+                    "which is what their .apk opens. General's app is not touched.\n\n" +
+                    "Deploy afterwards (git push) so their phones receive it.",
+                    "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question) != DialogResult.OK) return;
+
+            Busy(true);
+            new Thread(() =>
+            {
+                try
+                {
+                    Status("Putting the firmware inside " + whoSel + "'s app...");
+                    Log("");
+                    Log("=== firmware included with " + whoSel + "'s app (c\\" + chan + ") ===");
+                    string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : (chkRev5.Checked ? "rev5" : "rev6");
+                    RunPs("build_customer_site.ps1",
+                          "-Id " + chan + " -Name \"" + whoSel + "\" -Board " + board +
+                          " -Controller \"" + txtCtrl.Text + "\"" +
+                          (File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
+                          (chkEsp.Checked && Directory.Exists(txtEsp.Text)
+                               ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp"));
+                    bool ok = File.Exists(Path.Combine(AppDir, "c\\" + chan + "\\builtin.json"));
+                    Status(ok ? whoSel + "'s app carries this firmware - deploy it to reach phones."
+                              : "Failed - see the log.");
+                    Ask(ok ? "Done - " + whoSel + "'s app now carries this firmware.\n\n" +
+                             "Deploy the app (push to GitHub) so their phones receive it.\n" +
+                             "The .apk itself only needs rebuilding if you changed the app."
+                           : "Could not build c\\" + chan + " - see the log.",
+                        "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OK,
+                        ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
+                catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
+                finally { Busy(false); }
+            }) { IsBackground = true }.Start();
+            return;
+        }
+
+        if (Ask("Put the firmware chosen above INSIDE the General app?\n\n" +
+                "Phones that install the General app then carry this firmware and\n" +
+                "can update a controller with no internet.\n\n" +
                 "Deploy the app afterwards (git push) so phones receive it.",
                 "Firmware inside the app", MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Question) != DialogResult.OK) return;

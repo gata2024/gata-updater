@@ -1,7 +1,7 @@
 {
-    "packageId":  "com.gata.updater",
+    "packageId":  "com.gata.updater.danway",
     "host":  "gata2024.github.io",
-    "name":  "GATA Firmware Updater",
+    "name":  "GATA Updater - Danway",
     "launcherName":  "GATA Update",
     "display":  "standalone",
     "themeColor":  "#0b57d0",
@@ -12,7 +12,7 @@
     "navigationDividerColorDark":  "#0b57d0",
     "backgroundColor":  "#0b57d0",
     "enableNotifications":  false,
-    "startUrl":  "/gata-updater/",
+    "startUrl":  "/gata-updater/c/danway/",
     "iconUrl":  "https://gata2024.github.io/gata-updater/icon-512.png",
     "maskableIconUrl":  "https://gata2024.github.io/gata-updater/icon-512-maskable.png",
     "splashScreenFadeOutDuration":  300,
@@ -26,7 +26,7 @@
 
                   ],
     "generatorApp":  "bubblewrap-cli",
-    "webManifestUrl":  "https://gata2024.github.io/gata-updater/app.webmanifest",
+    "webManifestUrl":  "https://gata2024.github.io/gata-updater/c/danway/app.webmanifest",
     "fallbackType":  "customtabs",
     "features":  {
 
@@ -37,7 +37,7 @@
     "enableSiteSettingsShortcut":  true,
     "isChromeOSOnly":  false,
     "isMetaQuest":  false,
-    "fullScopeUrl":  "https://gata2024.github.io/gata-updater/",
+    "fullScopeUrl":  "https://gata2024.github.io/gata-updater/c/danway/",
     "minSdkVersion":  21,
     "orientation":  "any",
     "additionalTrustedOrigins":  [

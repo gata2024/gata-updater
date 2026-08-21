@@ -41,15 +41,59 @@ async function cacheBuiltinFirmware(cache) {
     const res = await fetch(new URL("builtin.json", self.registration.scope).href, { cache: "no-store" });
     if (!res.ok) return;
     const list = await res.json();
-    const urls = [];
-    for (const f of (list.main_firmware || [])) urls.push("main_firmware/" + f.name);
-    for (const f of (list.cloud_firmware || [])) urls.push("cloud_firmware/" + f.name);
-    urls.push("builtin.json");
-    if (list.receipt !== false) urls.push("firmware_receipt.json");
-    await Promise.all(urls.map(u =>
-      cache.add(new URL(u, self.registration.scope).href).catch(() => {})));
+    const want = [];   // {url, size} - size is what builtin.json says it should be
+    for (const f of (list.main_firmware || [])) want.push({ dir: "main_firmware/", f });
+    for (const f of (list.cloud_firmware || [])) want.push({ dir: "cloud_firmware/", f });
+    const wanted = new Set();
+
+    for (const w of want) {
+      const url = new URL(w.dir + w.f.name, self.registration.scope).href;
+      wanted.add(url);
+      /* Re-download only what actually differs: the stored copy is compared
+       * with the size builtin.json declares, so replacing the firmware inside
+       * the app reaches phones that already have an older copy, while an
+       * unchanged file costs nothing. */
+      let ok = false;
+      const have = await cache.match(url);
+      if (have && w.f.size) {
+        const len = Number(have.headers.get("content-length"));
+        if (len === w.f.size) ok = true;
+        else if (!len) ok = (await have.clone().arrayBuffer()).byteLength === w.f.size;
+      }
+      if (ok) continue;
+      try {
+        const r = await fetch(url, { cache: "reload" });
+        if (r.ok) await cache.put(url, r.clone());
+      } catch (e) { /* offline: keep whatever is already stored */ }
+    }
+
+    /* Firmware that is no longer part of the app must not linger on the phone,
+     * or a renamed binary would leave both versions installable. */
+    for (const req of await cache.keys()) {
+      if (!/\/(main_firmware|cloud_firmware)\//.test(req.url)) continue;
+      if (!wanted.has(req.url)) await cache.delete(req);
+    }
+
+    const meta = ["builtin.json"];
+    if (list.receipt !== false) meta.push("firmware_receipt.json");
+    await Promise.all(meta.map(async u => {
+      const url = new URL(u, self.registration.scope).href;
+      try {
+        const r = await fetch(url, { cache: "reload" });
+        if (r.ok) await cache.put(url, r.clone());
+      } catch (e) { /* ignore */ }
+    }));
   } catch (e) { /* offline or not published with firmware - ignore */ }
 }
+
+/* The page asks for this on every start (see app.js): a deploy that changes
+ * only a .bin leaves sw.js identical, so no install/activate would ever run
+ * again and nothing would notice the new firmware. */
+self.addEventListener("message", e => {
+  if (e.data && e.data.type === "refresh-builtin") {
+    e.waitUntil(caches.open(CACHE).then(c => cacheBuiltinFirmware(c)));
+  }
+});
 
 self.addEventListener("install", e => {
   e.waitUntil(
