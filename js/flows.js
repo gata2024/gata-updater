@@ -345,7 +345,14 @@ const Flows = {
     let lastErr = null;
     for (let cycle = 0; cycle < maxCycles; cycle++) {
       this._ck();
-      const image = ctx.pkg.system;
+      /* Copy first: the package may be installed again later, and the stamp
+       * must be fresh every time. */
+      const image = Uint8Array.from(ctx.pkg.system);
+      const stamp = DfuSeDevice.stampSession(image);
+      if (stamp !== null) {
+        Util.info("This install is marked so the controller waits for the updater " +
+                  "instead of starting its old software.");
+      }
       step("system", "active",
         I18N.t("d.sysFlashing", { s: Util.fmtBytes(image.length) }), 0);
       const dfu = await this._openDfu(ctx);
@@ -755,13 +762,16 @@ const Flows = {
     const t0 = Date.now();
     let ok = false;
     try {
-      const image = ctx.pkg.system;
-      if (!image) throw new UploaderError("The system firmware file is not loaded.",
+      if (!ctx.pkg.system) throw new UploaderError("The system firmware file is not loaded.",
         I18N.t("hint.pickBoth"));
-      if (!Validate.isValidSystem(image)) {
+      if (!Validate.isValidSystem(ctx.pkg.system)) {
         throw new UploaderError(I18N.t("val.boot", { f: "system firmware" }));
       }
+      /* Work on a copy: the stamp must be fresh on every install, and the
+       * downloaded package may be installed more than once. */
+      const image = Uint8Array.from(ctx.pkg.system);
       await this._acquireWakeLock();
+      DfuSeDevice.stampSession(image);   // same mark as the full update
       const dfu = await this._openDfu(ctx);
       await dfu.flash(APP_CONFIG.systemFlashAddr, image, p =>
         ctx.onProgress && ctx.onProgress(p.phase, p.value));

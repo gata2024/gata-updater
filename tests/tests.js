@@ -206,6 +206,43 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ------------- "do not jump, I was just installed", carried in the image */
+    {
+      const sig = "GATASESS";
+      const mkImg = (withSig) => {
+        const a = new Uint8Array(200).fill(0x11);
+        if (withSig) {
+          for (let k = 0; k < 8; k++) a[100 + k] = sig.charCodeAt(k);
+          a[108] = a[109] = a[110] = a[111] = 0xFF;
+        }
+        return a;
+      };
+      const img1 = mkImg(true), img2 = mkImg(true);
+      const id1 = DfuSeDevice.stampSession(img1);
+      const id2 = DfuSeDevice.stampSession(img2);
+      this.check("session mark: every install gets a different id, so the SAME file still says 'just installed'",
+        id1 !== null && id2 !== null && id1 !== id2);
+      const read = (x) => (x[108] | (x[109] << 8) | (x[110] << 16) | (x[111] << 24)) >>> 0;
+      this.check("session mark: the id really lands in the image", read(img1) === id1);
+      let changedElsewhere = 0;
+      const clean = mkImg(true);
+      for (let i = 0; i < clean.length; i++) {
+        if (i >= 108 && i < 112) continue;
+        if (img1[i] !== clean[i]) changedElsewhere++;
+      }
+      this.check("session mark: nothing else in the image is touched",
+        changedElsewhere === 0 && img1.length === clean.length);
+      const noSig = mkImg(false);
+      const before = Array.from(noSig);
+      this.check("session mark: system firmware without the mark (older builds) is left alone",
+        DfuSeDevice.stampSession(noSig) === null &&
+        before.every((v, i) => noSig[i] === v));
+      const fsrc3 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      this.check("session mark: both BOOT-mode install paths stamp a COPY, never the downloaded package",
+        (fsrc3.match(/stampSession\(image\)/g) || []).length >= 2 &&
+        (fsrc3.match(/Uint8Array\.from\(ctx\.pkg\.system\)/g) || []).length >= 2);
+    }
+
     /* ------------------ firmware on the device: built-in, picked, remembered */
     {
       /* (1) firmware that ships WITH the app - what puts binaries on a phone */
