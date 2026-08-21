@@ -1447,8 +1447,28 @@ class ReleaseManager : Form
                 rc = RunPs("make_license.ps1", "-Customer " + Q(name) + " -Channel " + id);
                 if (rc != 0) { Status("License creation failed - see the log."); Busy(false); return; }
 
+                /* new_customer.ps1 also drops a half-built copy of the app in
+                 * c\<id>: no licence, no firmware, and whatever version of the
+                 * files it copied. Published, that is a company app that
+                 * cannot install anything. The real one is built by
+                 * build_customer_site.ps1 (ANDROID APP / FIRMWARE INSIDE THE
+                 * APP), so remove the stub rather than leave a broken page
+                 * waiting to be pushed. */
+                string stub = Path.Combine(AppDir, "c\\" + id);
+                if (Directory.Exists(stub) && !File.Exists(Path.Combine(stub, "gata.license")))
+                {
+                    try
+                    {
+                        Directory.Delete(stub, true);
+                        Log("   removed the placeholder page c\\" + id +
+                            " - build the real one with ANDROID APP when their firmware is chosen.");
+                    }
+                    catch (Exception ex) { Log("   ! could not remove c\\" + id + ": " + ex.Message); }
+                }
+
                 Log("");
                 Log("=== " + name + " is ready. Publish for them, then build their uploader folder. ===");
+                Log("Their Android app: choose their firmware above, then press ANDROID APP.");
                 Status(name + " created.");
                 BeginInvoke((Action)(() => { LoadCustomers(); LoadCloudList(); }));
             }
@@ -1487,6 +1507,10 @@ class ReleaseManager : Form
                 "Takes a few minutes.",
                 "Android app - " + who, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 
+        /* Asked here, on the UI thread, before any work starts. */
+        string apkBoard = isGeneral ? null : AskBoard("An app");
+        if (!isGeneral && apkBoard == null) return;
+
         Busy(true);
         new Thread(() =>
         {
@@ -1498,8 +1522,7 @@ class ReleaseManager : Form
                     Status("Building " + who + "'s page (c\\" + channel + ")...");
                     Log("");
                     Log("=== " + who + "'s own copy of the app ===");
-                    string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : (chkRev5.Checked ? "rev5" : "rev6");
-                    string a = "-Id " + channel + " -Name \"" + who + "\" -Board " + board +
+                    string a = "-Id " + channel + " -Name \"" + who + "\" -Board " + apkBoard +
                                " -Controller \"" + txtCtrl.Text + "\"" +
                                (chkSystem.Checked || File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
                                (chkEsp.Checked && Directory.Exists(txtEsp.Text) ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp");
@@ -1555,15 +1578,29 @@ class ReleaseManager : Form
         string chan = SelectedChannel();
         string whoSel = chan == "default" ? "General" : Pretty(chan);
 
+        /* Unticking the cloud module does not merely "skip" it - what is listed
+         * must be what is there, so ESP firmware already inside the app is
+         * REMOVED. That happened for real and nothing said a word, leaving an
+         * app with no cloud-module firmware at all. Say it in the question. */
+        string espLine = chkEsp.Checked && Directory.Exists(txtEsp.Text)
+            ? "The cloud module (ESP32) firmware is included."
+            : "WARNING: 'Cloud module (ESP32)' is not ticked, so any ESP32\n" +
+              "firmware already inside this app will be REMOVED.";
+
+        /* One app holds ONE controller binary, so exactly one board. */
+        string board = AskBoard("An app");
+        if (board == null) return;
+
         /* Each company has its OWN app now (c\<id>\), so the firmware has to go
          * into that company's copy. Writing it into the site root - which is
          * the General app - would have put, say, Danway's firmware inside the
          * app every General customer downloads, under a Danway name. */
         if (chan != "default")
         {
-            if (Ask("Put the firmware chosen above inside " + whoSel + "'s app?\n\n" +
+            if (Ask("Put the firmware chosen above inside " + whoSel + "'s app (" + board + ")?\n\n" +
                     "It goes into c\\" + chan + " - " + whoSel + "'s own copy of the app,\n" +
                     "which is what their .apk opens. General's app is not touched.\n\n" +
+                    espLine + "\n\n" +
                     "Deploy afterwards (git push) so their phones receive it.",
                     "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OKCancel,
                     MessageBoxIcon.Question) != DialogResult.OK) return;
@@ -1576,7 +1613,6 @@ class ReleaseManager : Form
                     Status("Putting the firmware inside " + whoSel + "'s app...");
                     Log("");
                     Log("=== firmware included with " + whoSel + "'s app (c\\" + chan + ") ===");
-                    string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : (chkRev5.Checked ? "rev5" : "rev6");
                     RunPs("build_customer_site.ps1",
                           "-Id " + chan + " -Name \"" + whoSel + "\" -Board " + board +
                           " -Controller \"" + txtCtrl.Text + "\"" +
@@ -1599,9 +1635,10 @@ class ReleaseManager : Form
             return;
         }
 
-        if (Ask("Put the firmware chosen above INSIDE the General app?\n\n" +
+        if (Ask("Put the firmware chosen above INSIDE the General app (" + board + ")?\n\n" +
                 "Phones that install the General app then carry this firmware and\n" +
                 "can update a controller with no internet.\n\n" +
+                espLine + "\n\n" +
                 "Deploy the app afterwards (git push) so phones receive it.",
                 "Firmware inside the app", MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Question) != DialogResult.OK) return;
@@ -1622,7 +1659,6 @@ class ReleaseManager : Form
                 foreach (var f in Directory.GetFiles(cloudDir, "*.bin")) File.Delete(f);
 
                 string who = SelectedChannel() == "default" ? "General" : Pretty(SelectedChannel());
-                string board = chkRev6.Checked && !chkRev5.Checked ? "rev6" : "rev5";
                 int n = CopySelectedFirmware(AppDir, who, board, txtCtrl.Text, txtSys.Text,
                                              chkEsp.Checked ? txtEsp.Text : null, Log);
 
@@ -1662,6 +1698,45 @@ class ReleaseManager : Form
     }
 
     // ---------------------------------------------------------------- backup
+    /* PUBLISH and BUILD FOLDER do every ticked board - one release, one folder
+     * each. An APP cannot: it holds ONE controller binary, so exactly one
+     * board has to be named. Both boxes are ticked by default, and the old
+     * code silently resolved that to rev5 - so a rev 6 controller was copied
+     * in under a name saying rev5. Ask instead of guessing. Returns null if
+     * the question is dismissed. */
+    string AskBoard(string what)
+    {
+        if (chkRev5.Checked && !chkRev6.Checked) return "rev5";
+        if (chkRev6.Checked && !chkRev5.Checked) return "rev6";
+
+        using (var f = new Form())
+        {
+            f.Text = "Which board?";
+            f.FormBorderStyle = FormBorderStyle.FixedDialog;
+            f.StartPosition = FormStartPosition.CenterParent;
+            f.MinimizeBox = f.MaximizeBox = false;
+            f.ClientSize = new Size(470, 132);
+            f.Font = new Font("Segoe UI", 9F);
+            f.Controls.Add(new Label
+            {
+                Left = 16, Top = 14, Width = 440, Height = 56,
+                Text = what + " holds the controller software for ONE board.\n" +
+                       "Both boards are ticked above - which one is this for?"
+            });
+            string picked = null;
+            var b5 = new Button { Left = 16, Top = 80, Width = 200, Height = 34, Text = "Board rev 5" };
+            var b6 = new Button { Left = 226, Top = 80, Width = 200, Height = 34, Text = "Board rev 6" };
+            b5.Click += (s, e) => { picked = "rev5"; f.DialogResult = DialogResult.OK; };
+            b6.Click += (s, e) => { picked = "rev6"; f.DialogResult = DialogResult.OK; };
+            f.Controls.Add(b5);
+            f.Controls.Add(b6);
+            f.CancelButton = null;
+            if (InvokeRequired) return (string)Invoke(new Func<string>(() =>
+            { return f.ShowDialog(this) == DialogResult.OK ? picked : null; }));
+            return f.ShowDialog(this) == DialogResult.OK ? picked : null;
+        }
+    }
+
     void BackupKeys()
     {
         using (var d = new FolderBrowserDialog { Description = "Where should the key backup be saved? (USB stick recommended)" })
