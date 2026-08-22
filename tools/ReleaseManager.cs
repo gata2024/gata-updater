@@ -1081,7 +1081,7 @@ class ReleaseManager : Form
                 }
                 /* The firmware inside the app, from the same tick that chose it
                  * - written AND published, so nothing is left half-done. */
-                ApplyFirmwareInsideApp(channel, who, inAppBoard);
+                ApplyFirmwareInsideApp(channel, who, inAppBoard, null);
 
                 Status("Published. Customers see it on their next start.");
                 BeginInvoke((Action)LoadCloudList);
@@ -1720,16 +1720,27 @@ class ReleaseManager : Form
 
         if (MessageBox.Show(
                 "Build the Android app for " + who + "?\n\n" + siteNote + "\n\n" +
-                "The app opens THAT company's page, so it carries their licence,\n" +
-                "their cloud channel and their own built-in firmware.\n\n" +
-                "IMPORTANT: publish the app (git push) BEFORE building, or the\n" +
-                "Android tools read the previous version of the page.\n\n" +
+                "The app opens THAT company's page, so it carries their licence\n" +
+                "and their cloud channel.\n\n" +
+                (chkInApp.Checked
+                    ? "Firmware inside it: YES (the tick in section 3) - the phone stores\n" +
+                      "the chosen files and can install with no internet."
+                    : "Firmware inside it: NO (the tick in section 3 is clear) - the phone\n" +
+                      "downloads from the cloud every time and cannot install offline.") + "\n\n" +
+                "The page is published for you first, and the build waits until it\n" +
+                "is really live.\n\n" +
                 "Takes a few minutes.",
                 "Android app - " + who, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 
         /* Asked here, on the UI thread, before any work starts. */
-        string apkBoard = isGeneral ? null : AskBoard("An app");
-        if (!isGeneral && apkBoard == null) return;
+        /* Only worth asking which board when the app is going to carry a
+         * controller binary at all. */
+        string apkBoard = null;
+        if (chkInApp.Checked)
+        {
+            apkBoard = AskBoard("An app");
+            if (apkBoard == null) return;
+        }
 
         Busy(true);
         new Thread(() =>
@@ -1737,36 +1748,27 @@ class ReleaseManager : Form
             try
             {
                 DateTime started = DateTime.Now.AddSeconds(-5);
-                if (!isGeneral)
+
+                /* The SAME tick decides what this app carries. It used to be
+                 * ignored here, so building an .apk always baked the firmware
+                 * in even with the box cleared - the tick said one thing and
+                 * the app did another.
+                 *
+                 * The page is built and published BEFORE the apk, and waited
+                 * for: the Android tooling reads the web manifest over the
+                 * network, so an unpublished page means the apk is wrapped
+                 * around the PREVIOUS version of it. */
+                Status("Building " + who + "'s page...");
+                ApplyFirmwareInsideApp(channel, who, apkBoard,
+                    isGeneral ? "https://gata2024.github.io/gata-updater/app.webmanifest"
+                              : "https://gata2024.github.io/gata-updater/c/" + channel + "/app.webmanifest");
+
+                if (!isGeneral && !File.Exists(Path.Combine(AppDir, "c\\" + channel + "\\builtin.json")))
                 {
-                    Status("Building " + who + "'s page (c\\" + channel + ")...");
-                    Log("");
-                    Log("=== " + who + "'s own copy of the app ===");
-                    string a = "-Id " + channel + " -Name \"" + who + "\" -Board " + apkBoard +
-                               " -Controller \"" + txtCtrl.Text + "\"" +
-                               (chkSystem.Checked || File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
-                               (chkEsp.Checked && Directory.Exists(txtEsp.Text) ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp");
-                    RunPs("build_customer_site.ps1", a);
-                    if (!File.Exists(Path.Combine(AppDir, "c\\" + channel + "\\builtin.json")))
-                    {
-                        Status("The company page was not built - see the log.");
-                        Ask("Could not build c\\" + channel + " - see the log.\n\n" +
-                            "The apk was NOT built.", "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-                    /* Published BEFORE the apk is built, and waited for: the
-                     * Android tooling reads the web manifest over the network,
-                     * so an unpublished page means the apk is wrapped around
-                     * the PREVIOUS version of it. */
-                    Status("Publishing " + who + "'s page before building the app...");
-                    DeployApp(who + " app page",
-                              "https://gata2024.github.io/gata-updater/c/" + channel + "/app.webmanifest");
-                }
-                else
-                {
-                    Status("Publishing the app before building it...");
-                    DeployApp("General app page",
-                              "https://gata2024.github.io/gata-updater/app.webmanifest");
+                    Status("The company page was not built - see the log.");
+                    Ask("Could not build c\\" + channel + " - see the log.\n\n" +
+                        "The apk was NOT built.", "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
 
                 Status("Building " + who + "'s Android app (this takes a few minutes)...");
@@ -1812,7 +1814,7 @@ class ReleaseManager : Form
      *
      * General is the site root (there is no c\default), so it has its own
      * script; every other company is a page under c\. */
-    void ApplyFirmwareInsideApp(string channel, string who, string board)
+    void ApplyFirmwareInsideApp(string channel, string who, string board, string waitUrl)
     {
         bool include = chkInApp.Checked;
         Log("");
@@ -1850,7 +1852,7 @@ class ReleaseManager : Form
         }
 
         Status("Publishing " + who + "'s app...");
-        DeployApp(who + (include ? " app firmware" : " app: firmware removed"), null);
+        DeployApp(who + (include ? " app firmware" : " app: firmware removed"), waitUrl);
     }
 
     /* PUBLISH and BUILD FOLDER do every ticked board - one release, one folder

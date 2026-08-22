@@ -67,7 +67,11 @@ Double-click it in the uploader folder and do everything with buttons — no com
       its own license and its own built-in firmware
       (<code>dist\gata-updater.apk</code>, <code>dist\gata-updater-&lt;channel&gt;.apk</code>). It rebuilds
       their page, <b>publishes it and waits until it is really live</b> before building the apk. A firmware release never needs a new
-      apk — the app is a thin wrapper around the page.</li>
+      apk — the app is a thin wrapper around the page.<br>
+      The <b>same tick</b> decides whether that app carries firmware: ticked, the phone stores the chosen
+      files and installs with no internet; cleared, it downloads from the cloud every time. The .apk file
+      itself never contains firmware — the files live on the page and the phone keeps them after the first
+      launch with internet.</li>
   <li><b>Add new company…</b> — creates their channel and their license file. Their app page is built later,
       by ANDROID APP, once their firmware is chosen.</li>
   <li><b>Back up keys</b> — copies both keys, the keystore and all issued licenses to a USB stick.</li>
