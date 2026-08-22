@@ -173,6 +173,10 @@ const Flows = {
            * asking for it a second time is the wait this avoids. */
           if (ctx.preConnected) { transport = ctx.preConnected; ctx.preConnected = null; }
           if (!transport) transport = await Transport.reconnect();
+          if (!transport && attempt === 0 && o.promptAfter > 0) {
+            // say what the quiet wait is for, so it never looks stuck
+            Util.info(I18N.t("d.waitPort"));
+          }
           if (!transport && attempt >= o.promptAfter) {
             transport = await ctx.ui.userGate(I18N.t("gate.ser.btn"), I18N.t("gate.ser.text"),
               () => Transport.request(),
@@ -377,7 +381,13 @@ const Flows = {
 
       step("connect", "active", I18N.t("d.waitPort"), null);
       try {
-        const bl = await this._connectBootloader(ctx);
+        /* Do NOT put a second picker in front of the person straight away.
+         * The controller has just restarted and needs a moment to come back;
+         * once it does, the browser hands it over with no prompt at all if it
+         * has been seen before. Only after several quiet attempts is it worth
+         * asking - which is the difference between "one button, once" and a
+         * second selector appearing on top of the one already answered. */
+        const bl = await this._connectBootloader(ctx, { promptAfter: 4 });
         step("connect", "done", I18N.t("d.connected"), 1);
         return bl;
       } catch (e) {
