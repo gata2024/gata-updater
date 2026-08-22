@@ -102,10 +102,21 @@ const LocalSource = {
      * in - it happened for real: the General app was left carrying another
      * company's binaries and nothing said a word, because every file matched
      * its own receipt perfectly. Say it out loud instead. */
-    if (receipt && receipt.company && APP_CONFIG.customerName &&
-        receipt.company.trim().toLowerCase() !== APP_CONFIG.customerName.trim().toLowerCase()) {
-      Util.warn("This firmware was prepared for " + receipt.company + ", but this app belongs to " +
-                APP_CONFIG.customerName + " - check that it is the right firmware before installing.");
+    /* Whose app is this? A customer FOLDER is a copy of the shared app plus
+     * that company's licence file, so config.js still says "General" while
+     * the folder really belongs to whoever the licence names. The licence is
+     * the authority; config.js is only the fallback for a hosted company page
+     * that has no licence of its own. */
+    let owner = APP_CONFIG.customerName;
+    try {
+      const lic = await License.loadStored();
+      if (lic && (lic.customer || lic.company)) owner = lic.customer || lic.company;
+    } catch (e) { /* no licence yet - fall back to config.js */ }
+
+    if (receipt && receipt.company && owner &&
+        receipt.company.trim().toLowerCase() !== owner.trim().toLowerCase()) {
+      Util.warn("This firmware was prepared for " + receipt.company + ", but this uploader belongs to " +
+                owner + " - check that it is the right firmware before installing.");
     }
 
     const m = this.matchNames(mainEntries.map(e => e.name), cloudEntries.map(e => e.name));
