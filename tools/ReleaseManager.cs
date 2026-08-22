@@ -693,7 +693,10 @@ class ReleaseManager : Form
             string rec = Path.Combine(appDir, "firmware_receipt.json");
             if (File.Exists(rec)) File.Delete(rec);
             Log("   " + who + "'s app: " + n + " built-in firmware file(s) removed.");
-            Log("   DEPLOY (git push) so phones stop offering it - until then nothing changes for them.");
+            /* Removing it here changes nothing for a phone until the app is
+             * published - and this is the case where that matters most: the
+             * firmware was withdrawn, so it must stop being handed out. */
+            DeployApp(who + " app: withdrawn firmware removed", null);
         }
         catch (Exception ex) { Log("   ! could not empty the app's firmware: " + ex.Message); }
     }
@@ -1708,7 +1711,19 @@ class ReleaseManager : Form
                             "The apk was NOT built.", "Android app", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    Log("Publish it (git push) so the app can read it, then this build continues.");
+                    /* Published BEFORE the apk is built, and waited for: the
+                     * Android tooling reads the web manifest over the network,
+                     * so an unpublished page means the apk is wrapped around
+                     * the PREVIOUS version of it. */
+                    Status("Publishing " + who + "'s page before building the app...");
+                    DeployApp(who + " app page",
+                              "https://gata2024.github.io/gata-updater/c/" + channel + "/app.webmanifest");
+                }
+                else
+                {
+                    Status("Publishing the app before building it...");
+                    DeployApp("General app page",
+                              "https://gata2024.github.io/gata-updater/app.webmanifest");
                 }
 
                 Status("Building " + who + "'s Android app (this takes a few minutes)...");
@@ -1794,11 +1809,18 @@ class ReleaseManager : Form
                           (chkEsp.Checked && Directory.Exists(txtEsp.Text)
                                ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp"));
                     bool ok = File.Exists(Path.Combine(AppDir, "c\\" + chan + "\\builtin.json"));
-                    Status(ok ? whoSel + "'s app carries this firmware - deploy it to reach phones."
+                    /* The firmware inside an app lives on the WEBSITE, not in
+                     * the .apk - so writing it here changes nothing for a
+                     * phone until the app is published. Doing that by hand was
+                     * a step that could be forgotten, and a forgotten push
+                     * looks exactly like "the app has no firmware". */
+                    if (ok) { Status("Publishing " + whoSel + "'s app..."); DeployApp(whoSel + " app firmware", null); }
+                    Status(ok ? whoSel + "'s app carries this firmware, and it is published."
                               : "Failed - see the log.");
-                    Ask(ok ? "Done - " + whoSel + "'s app now carries this firmware.\n\n" +
-                             "Deploy the app (push to GitHub) so their phones receive it.\n" +
-                             "The .apk itself only needs rebuilding if you changed the app."
+                    Ask(ok ? "Done - " + whoSel + "'s app now carries this firmware,\n" +
+                             "and it has been published.\n\n" +
+                             "Their phones pick it up the next time they open the app with\n" +
+                             "internet. The .apk itself does NOT need rebuilding."
                            : "Could not build c\\" + chan + " - see the log.",
                         "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OK,
                         ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -1859,11 +1881,14 @@ class ReleaseManager : Form
                 File.WriteAllText(Path.Combine(AppDir, "builtin.json"), sb.ToString(), new UTF8Encoding(false));
 
                 Log("   builtin.json written (" + n + " file(s) included with the app)");
-                Log("=== DONE - now deploy the app so phones receive it ===");
-                Status("Firmware is inside the app - deploy it to reach phones.");
-                Ask("Done - the app now carries this firmware.\n\n" +
-                    "Deploy the app (push to GitHub) so installed phones receive it,\n" +
-                    "and rebuild the .apk only if you also changed the app itself.",
+                Status("Publishing the General app...");
+                DeployApp("General app firmware", null);
+                Log("=== DONE ===");
+                Status("Firmware is inside the General app, and it is published.");
+                Ask("Done - the General app now carries this firmware,\n" +
+                    "and it has been published.\n\n" +
+                    "Phones pick it up the next time they open the app with internet.\n" +
+                    "The .apk itself does NOT need rebuilding.",
                     "Firmware inside the app", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
@@ -1909,6 +1934,24 @@ class ReleaseManager : Form
             { return f.ShowDialog(this) == DialogResult.OK ? picked : null; }));
             return f.ShowDialog(this) == DialogResult.OK ? picked : null;
         }
+    }
+
+    /* Publish the app itself. Firmware "inside an app" lives on the WEBSITE,
+     * not in the .apk, so nothing reaches a phone until this runs - and doing
+     * it by hand was a step that could be forgotten, which looks exactly like
+     * "the app has no firmware". Every button that changes an app page calls
+     * this, so the push is never a separate thing to remember.
+     *
+     * waitUrl (optional): poll until that address really serves, before
+     * carrying on - needed before building an .apk, because the Android
+     * tooling reads the web manifest over the network. */
+    void DeployApp(string message, string waitUrl)
+    {
+        string a = "-Message \"" + (message ?? "app update").Replace("\"", "'") + "\"";
+        if (!string.IsNullOrEmpty(waitUrl)) a += " -WaitForUrl \"" + waitUrl + "\"";
+        int rc = RunPs("deploy_app.ps1", a);
+        if (rc != 0)
+            Log("   !! the app could NOT be published - phones keep the page they already have.");
     }
 
     void BackupKeys()
