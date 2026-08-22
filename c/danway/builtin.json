@@ -3,7 +3,7 @@
     "main_firmware":  [
                           {
                               "name":  "controller_22_08_26_Danway_rev5.bin",
-                              "size":  895716
+                              "size":  301348
                           },
                           {
                               "name":  "system_22_08_26_Danway_rev5.bin",
