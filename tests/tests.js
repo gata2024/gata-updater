@@ -250,6 +250,29 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ---------------- what a cloud release says about itself on screen */
+    {
+      const asrc4 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      /* anchor on the DEFINITION - "renderVersions()" also appears as a call
+         earlier in the file, and matching that grabbed a different function */
+      const rv = (asrc4.match(/\n  renderVersions\(\) \{[\s\S]*?\n  \},/) || [""])[0];
+      /* A release carries the controller under "controller" now and "main" on
+         older ones. Reading only "main" meant the size never appeared on
+         anything published recently. */
+      this.check("version row: the controller size comes from EITHER field name",
+        /Cloud\.controllerEntry\(v\)/.test(rv) && !/v\.main && v\.main\.size/.test(rv));
+      this.check("version row: it also shows when the software was COMPILED",
+        /ctrl\.built/.test(rv) && /ver\.built/.test(rv));
+      const i18 = await (await fetch("../js/i18n.js", { cache: "no-store" })).text();
+      this.check("version row: the 'built' label exists in all three languages",
+        (i18.match(/"ver\.built":/g) || []).length === 3);
+      /* controllerEntry itself must accept both shapes. */
+      this.check("version row: controllerEntry reads new and old releases",
+        Cloud.controllerEntry({ controller: { size: 1 } }).size === 1 &&
+        Cloud.controllerEntry({ main: { size: 2 } }).size === 2 &&
+        Cloud.controllerEntry({}) === null);
+    }
+
     /* ------------- erasing the controller software works from BOOT mode too */
     {
       const fsrc5 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();

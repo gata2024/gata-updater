@@ -319,9 +319,22 @@ const App = {
       const meta = document.createElement("div");
       meta.className = "vmeta";
       meta.textContent = v.date || "";
-      if (v.main && v.main.size) {
+      /* The controller software, spelled out: how big it is and when it was
+       * COMPILED - not when it was published. Releases carry both names for
+       * the same file (the current "controller", the older "main"), and this
+       * only ever looked at the old one, so the size never appeared at all on
+       * anything published recently. */
+      const ctrl = Cloud.controllerEntry(v);
+      if (ctrl && ctrl.size) {
         meta.appendChild(document.createElement("br"));
-        meta.appendChild(document.createTextNode(Util.fmtBytes(v.main.size)));
+        meta.appendChild(document.createTextNode(Util.fmtBytes(ctrl.size)));
+      }
+      if (ctrl && ctrl.built) {
+        meta.appendChild(document.createElement("br"));
+        const b = document.createElement("span");
+        b.className = "vbuilt";
+        b.textContent = I18N.t("ver.built") + " " + ctrl.built;
+        meta.appendChild(b);
       }
       row.appendChild(radio); row.appendChild(main); row.appendChild(meta);
       list.appendChild(row);

@@ -136,6 +136,7 @@ const I18N = {
       "plat.android": "Android detected — updating works over a <b>USB-OTG</b> cable. When asked, allow Chrome to access the USB device.",
 
       "ver.prefix": "Version",
+      "ver.built": "built",
       "tag.latest": "Latest",
       "tag.esp": "+ ESP32",
 
@@ -371,6 +372,7 @@ const I18N = {
       "plat.android": "تم اكتشاف Android — يعمل التحديث عبر كابل <b>USB-OTG</b>. عند السؤال، اسمح لـ Chrome بالوصول إلى جهاز USB.",
 
       "ver.prefix": "الإصدار",
+      "ver.built": "تم بناؤه",
       "tag.latest": "الأحدث",
       "tag.esp": "+ ESP32",
 
@@ -606,6 +608,7 @@ const I18N = {
       "plat.android": "Android algılandı — güncelleme <b>USB-OTG</b> kablosuyla çalışır. Sorulduğunda Chrome'un USB cihazına erişmesine izin verin.",
 
       "ver.prefix": "Sürüm",
+      "ver.built": "derlendi",
       "tag.latest": "En yeni",
       "tag.esp": "+ ESP32",
 
