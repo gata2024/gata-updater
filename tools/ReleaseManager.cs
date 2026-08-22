@@ -15,6 +15,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -64,6 +65,22 @@ class ReleaseManager : Form
                             "(tools\\publish_firmware.ps1 was not found).\n\nLooked in: " + ToolsDir,
                             "GATA Release Manager", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
+        }
+
+        /* Check a prepared folder as text - the same receipt arithmetic the
+         * button does, for scripting and for testing:
+         *     GATA_Release_Manager.exe /checkfolder <folder>
+         * Exit code = number of faults (0 = safe to send).                    */
+        if (args.Length >= 2 && args[0].Equals("/checkfolder", StringComparison.OrdinalIgnoreCase))
+        {
+            AttachConsole(-1);
+            var faults = new List<string>();
+            int okCount = CheckReceipt(args[1], s => Console.WriteLine(s), faults);
+            foreach (string f in faults) Console.WriteLine("   !! " + f);
+            Console.WriteLine("   " + okCount + " file(s) verified, " + faults.Count + " fault(s).");
+            Console.WriteLine(faults.Count == 0 ? "OK - every file is exactly as delivered."
+                                                : "DO NOT SEND THIS FOLDER.");
+            Environment.Exit(faults.Count);
         }
 
         /* What is in the cloud for a company, as text - the same parsing the
@@ -1418,6 +1435,50 @@ class ReleaseManager : Form
     /* "Is the firmware I chose really the one in that folder?" - answered by
      * re-hashing: the folder's files vs its receipt, AND vs the files
      * currently selected in this window. */
+    /* Re-hash every firmware file a folder was delivered with and compare it
+     * with the receipt. Faults are appended to `bad`; the return value is how
+     * many files were verified clean.
+     *
+     * ONLY the "files" object is read. The receipt also carries
+     * "built_times", whose keys are the SAME file names but whose values are
+     * dates - read as hashes those never matched, so a perfectly good folder
+     * was reported as six changed files and the button said "do not send this
+     * folder". Whitespace-tolerant too: the receipt written by PowerShell
+     * spaces its colons differently from the one written here. */
+    public static int CheckReceipt(string dest, Action<string> log, List<string> bad)
+    {
+        string rec = Path.Combine(dest, "firmware_receipt.json");
+        if (!File.Exists(rec)) { bad.Add("no firmware_receipt.json"); return 0; }
+        string filesObj = ObjectOf(File.ReadAllText(rec), "files");
+        if (filesObj == null) { bad.Add("the receipt has no file list"); return 0; }
+
+        int okCount = 0;
+        var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in Regex.Matches(filesObj,
+                 "\"((?:main_firmware|cloud_firmware)/[^\"]+)\"\\s*:\\s*\"([0-9a-fA-F]{64})\""))
+        {
+            string rel = m.Groups[1].Value, want = m.Groups[2].Value;
+            listed.Add(rel.Replace('/', '\\'));
+            string path = Path.Combine(dest, rel.Replace('/', '\\'));
+            if (!File.Exists(path)) { bad.Add(rel + " - MISSING"); continue; }
+            string got = Sha256(path);
+            if (!string.Equals(got, want, StringComparison.OrdinalIgnoreCase))
+                bad.Add(rel + " - CHANGED (" + got.Substring(0, 12) + " instead of " + want.Substring(0, 12) + ")");
+            else { okCount++; if (log != null) log("   ok  " + rel + "   [" + got.Substring(0, 12) + "]"); }
+        }
+        /* A binary nobody put there is as wrong as a changed one: it would be
+         * offered for installation with nothing vouching for it. */
+        foreach (string sub in new[] { "main_firmware", "cloud_firmware" })
+        {
+            string d = Path.Combine(dest, sub);
+            if (!Directory.Exists(d)) continue;
+            foreach (string f in Directory.GetFiles(d, "*.bin"))
+                if (!listed.Contains(sub + "\\" + Path.GetFileName(f)))
+                    bad.Add(sub + "\\" + Path.GetFileName(f) + " - NOT on the receipt");
+        }
+        return okCount;
+    }
+
     void CheckFolder()
     {
         string dest = PromptPath("Check a folder",
@@ -1442,26 +1503,8 @@ class ReleaseManager : Form
             return;
         }
 
-        string json = File.ReadAllText(rec);
         var bad = new List<string>();
-        int checkedCount = 0;
-        foreach (string rawLine in json.Split('\n'))
-        {
-            string t = rawLine.Trim();
-            if (!t.StartsWith("\"main_firmware/") && !t.StartsWith("\"cloud_firmware/")) continue;
-            int q = t.IndexOf("\": \"");
-            if (q < 0) continue;
-            string rel = t.Substring(1, q - 1);
-            string want = t.Substring(q + 4).TrimEnd(',', '"', ' ');
-            string path = Path.Combine(dest, rel.Replace('/', '\\'));
-            if (!File.Exists(path)) { bad.Add(rel + " - MISSING"); continue; }
-            string got = Sha256(path);
-            checkedCount++;
-            if (!string.Equals(got, want, StringComparison.OrdinalIgnoreCase))
-                bad.Add(rel + " - CHANGED (" + got.Substring(0, 12) + " instead of " + want.Substring(0, 12) + ")");
-            else
-                Log("   ok  " + rel + "   [" + got.Substring(0, 12) + "]");
-        }
+        int checkedCount = CheckReceipt(dest, Log, bad);
 
         // ...and does it match what is selected in the window right now?
         var differs = new List<string>();
