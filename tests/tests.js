@@ -250,6 +250,36 @@ const T = {
         /licenses\//.test(psrc) && /t\s+=\s+'pkg'/.test(psrc) && /license_key\.json/.test(psrc));
     }
 
+    /* ------------- erasing the controller software works from BOOT mode too */
+    {
+      const fsrc5 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      const erase = (fsrc5.match(/async runEraseApp\(ctx\)[\s\S]*?\n  \},/) || [""])[0];
+      this.check("erase: a board in BOOT mode is accepted (the system firmware goes in first)",
+        /_establishUpdateMode/.test(erase) && /ctx\.pkg && ctx\.pkg\.system/.test(erase));
+      this.check("erase: with no system firmware to install it still works over serial",
+        /_connectBootloader/.test(erase));
+      const asrc3 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      this.check("erase: the button fetches ONLY the system firmware, and a failure is not fatal",
+        /getPackage\("system"\)/.test(asrc3) &&
+        /system: \{ controller: false, system: true, esp: "no" \}/.test(asrc3));
+      this.check("erase: the board chosen at the click is handed to the flow",
+        /runEraseApp\(\{[\s\S]{0,400}preDfu:/.test(asrc3));
+      /* Live proof: the mock controller runs the whole BOOT-mode erase without
+         asking a second time. */
+      let ranFromBoot = false, askedAgain = false;
+      try {
+        await Flows.runEraseApp({
+          demo: true, pkg: { system: new Uint8Array(1024) }, board: "rev6",
+          preDfu: { mock: true },
+          ui: { step: () => {}, userGate: () => { askedAgain = true; throw new Error("asked again"); } },
+          onDeviceLine: () => {}, onTick: () => {},
+        });
+        ranFromBoot = true;
+      } catch (e) { /* reported below */ }
+      this.check("erase: BOOT-mode erase completes without asking for the controller again",
+        ranFromBoot && !askedAgain);
+    }
+
     /* ---------------- the connect choice comes FIRST, before the download */
     {
       const asrc2 = await (await fetch("../js/app.js", { cache: "no-store" })).text();

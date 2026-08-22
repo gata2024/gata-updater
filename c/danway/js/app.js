@@ -710,6 +710,10 @@ const App = {
       controller: { controller: true, system: true, esp: "no" },
       cloud: { controller: false, system: true, esp: "required" },
       both: { controller: true, system: true, esp: "optional" },
+      /* Erasing the controller software installs nothing - but a board sitting
+       * in BOOT mode has no bootloader to take the command, so the system
+       * firmware has to go in first. Nothing else is downloaded. */
+      system: { controller: false, system: true, esp: "no" },
     }[mode || "both"];
 
     if (this.localMode) {
@@ -942,9 +946,22 @@ const App = {
       this.setBusy(true);
       this.$("logCard").open = true;
       try {
+        /* The system firmware, fetched underneath the question: it is only
+         * needed if the controller turns out to be in BOOT mode, where there
+         * is no bootloader yet to take the erase command. A failure here is
+         * not fatal - a board that is merely running its old software never
+         * needs it. */
+        const sysPromise = this.getPackage("system").catch(e => {
+          Util.warn("Could not fetch the system firmware (" + e.message +
+                    ") - BOOT mode will not be available for this erase.");
+          return null;
+        });
         const picked = await this.preConnect();
+        const got = await sysPromise;
         await Flows.runEraseApp({
           demo: this.demo(),
+          pkg: got ? got.pkg : null,
+          board: this.board(),
           preConnected: picked && picked.serial ? picked.serial : null,
           preDfu: picked && picked.dfu ? picked.dfu : null,
           ui: { step: () => {}, userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll) },

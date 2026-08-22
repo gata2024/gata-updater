@@ -749,7 +749,22 @@ const Flows = {
     let ok = false;
     try {
       await this._acquireWakeLock();
-      const bl = await this._connectBootloader(ctx, { tries: 6, delay: 1200 });
+
+      /* A controller in BOOT mode is a bare STM32 in DFU - there is no GATA
+       * bootloader there yet to take an erase command, so this used to be a
+       * serial-only action and choosing "in update mode" simply waited for a
+       * port that never appeared. _establishUpdateMode handles both: a running
+       * controller is asked to reboot into update mode, and a board in BOOT
+       * mode gets the system firmware installed FIRST (which is what puts a
+       * bootloader there), then the erase runs over its serial link.
+       *
+       * Without the system firmware in hand there is nothing to install, so
+       * the old serial-only path stays as the fallback. */
+      const step = (ctx.ui && ctx.ui.step) || (() => {});
+      const canBoot = !!(ctx.pkg && ctx.pkg.system) || !!ctx.demo;
+      const bl = canBoot
+        ? await this._establishUpdateMode(ctx, step)
+        : await this._connectBootloader(ctx, { tries: 6, delay: 1200 });
       Util.warn("Erasing the controller software - the controller will then wait for a new one.");
       await bl.format(sec => ctx.onTick && ctx.onTick(sec));
       this._ck();
