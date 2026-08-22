@@ -285,12 +285,14 @@ const T = {
       const asrc2 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       const body = (asrc2.match(/async onUpdate\(mode\)[\s\S]*?\n  \},/) || [""])[0];
       const iGate = body.indexOf("this.preConnect()");
-      const iPkg = body.indexOf("await pkgPromise");
-      const iStart = body.indexOf("this.getPackage(mode)");
-      this.check("connect: the controller is asked for BEFORE the software is waited for",
-        iGate > 0 && iPkg > iGate);
-      this.check("connect: the download starts underneath the question, not after it",
-        iStart > 0 && iStart < iGate && /pkgPromise\.catch/.test(body));
+      const iPkg = body.indexOf("this.getPackage(mode)");
+      /* The two connect buttons must NOT appear while the software is still
+         downloading: on a phone the picker and the "no device picked" retries
+         landed on top of the download messages and the flow fell apart. */
+      this.check("connect: the software is downloaded BEFORE the controller is asked for",
+        iPkg > 0 && iGate > iPkg);
+      this.check("connect: nothing runs the download and the question together",
+        !/pkgPromise/.test(body));
       this.check("connect: the first question offers BOTH states (running / update mode)",
         /preConnect\(\)[\s\S]*?gate\.boot\.btn/.test(asrc2) &&
         /preConnect\(\)[\s\S]*?DfuSeDevice\.requestDevice\(\)/.test(asrc2));

@@ -750,17 +750,20 @@ const App = {
        * second "connect" button appearing minutes later, after the download,
        * when the gesture is long gone. Already-approved controllers skip it
        * entirely and nothing is ever shown. */
-      /* Start fetching the software straight away, but do NOT wait for it.
-       * The slow part is a person finding a cable and pressing B+R, so the
-       * download runs underneath that: by the time they have answered, the
-       * files are usually already here. Any download error is still raised -
-       * it simply surfaces where it is awaited, below. */
-      const pkgPromise = this.getPackage(mode);
-      pkgPromise.catch(() => {});          // reported at the await below
+      /* Download FIRST, then ask which controller.
+       *
+       * Running the two together looked faster on paper and was worse in the
+       * hand: the question and the device picker landed on top of download
+       * progress, every "no device picked" retry fought with the download
+       * messages, and a person could be tapping at a picker while the files
+       * were still arriving. One thing at a time - get the software, then ask
+       * for the controller, then install. */
+      const { pkg, version } = await this.getPackage(mode);
 
+      /* Only now: the software is here, so the two buttons are the only thing
+       * on screen and the next tap is the last one needed. */
       const picked = await this.preConnect();
 
-      const { pkg, version } = await pkgPromise;
       await Flows.runFullUpdate({
         mode, pkg, version,
         preConnected: picked && picked.serial ? picked.serial : null,
@@ -946,18 +949,17 @@ const App = {
       this.setBusy(true);
       this.$("logCard").open = true;
       try {
-        /* The system firmware, fetched underneath the question: it is only
+        /* The system firmware first, then the question - same order as an
+         * update, so the picker never lands on top of a download. It is only
          * needed if the controller turns out to be in BOOT mode, where there
-         * is no bootloader yet to take the erase command. A failure here is
-         * not fatal - a board that is merely running its old software never
-         * needs it. */
-        const sysPromise = this.getPackage("system").catch(e => {
+         * is no bootloader yet to take the erase command, so a failure here is
+         * not fatal: a board merely running its old software never needs it. */
+        const got = await this.getPackage("system").catch(e => {
           Util.warn("Could not fetch the system firmware (" + e.message +
                     ") - BOOT mode will not be available for this erase.");
           return null;
         });
         const picked = await this.preConnect();
-        const got = await sysPromise;
         await Flows.runEraseApp({
           demo: this.demo(),
           pkg: got ? got.pkg : null,
