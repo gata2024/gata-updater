@@ -136,17 +136,13 @@ if ($remaining.Count -gt 0) {
 
 # ---- publish the change ----------------------------------------------------
 if (Test-Path (Join-Path $FirmwareDir ".git")) {
-    Push-Location $FirmwareDir
-    try {
-        & git add -A
-        & git -c core.safecrlf=false commit -q -m "Remove $Version from $Customer"
-        & git push -q origin main
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "PUBLISHED - the version is gone from every updater on its next start." -ForegroundColor Green
-        } else {
-            Write-Host "git push failed - run it manually from $FirmwareDir" -ForegroundColor Yellow
-        }
-    } catch {
-        Write-Host ("git step failed: " + $_.Exception.Message) -ForegroundColor Yellow
-    } finally { Pop-Location }
+    . (Join-Path $ScriptDir "git_publish.ps1")
+    if (Publish-Repo -RepoDir $FirmwareDir -Message "Remove $Version from $Customer") {
+        Write-Host "PUBLISHED - the version is gone from every updater on its next start." -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host "NOT PUBLISHED. It is gone on this PC only - customers can still download it." -ForegroundColor Red
+        Write-Host "Fix the login and push by hand:  cd $FirmwareDir ; git push" -ForegroundColor Red
+        exit 1
+    }
 }

@@ -27,39 +27,27 @@ if (-not (Test-Path (Join-Path $app ".git"))) {
     exit 0
 }
 
+$ErrorActionPreference = "Continue"
 Push-Location $app
 try {
     [Environment]::CurrentDirectory = $app
-
-    # git writes ordinary notices to stderr ("LF will be replaced by CRLF").
-    # In PowerShell 5.1 a native command's stderr becomes an ErrorRecord, and
-    # with ErrorActionPreference = Stop that ABORTS the script even though git
-    # succeeded. Judge git by its exit code, never by its stderr.
-    $ErrorActionPreference = "Continue"
-
     $dirty = & git status --porcelain
-    if (-not $dirty) {
-        Write-Host "Nothing changed - the app on the server is already up to date." -ForegroundColor Green
-    } else {
-        Write-Host "Publishing the app..." -ForegroundColor Cyan
-        & git -c core.safecrlf=false add -A
-        if ($LASTEXITCODE -ne 0) { throw "git add failed" }
-        & git -c core.safecrlf=false commit -q -m $Message
-        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
-        # 'github' is the remote the live site is served from; some clones only
-        # have 'origin'.
-        $pushed = $false
-        foreach ($remote in @("github", "origin")) {
-            $known = & git remote
-            if ($known -notcontains $remote) { continue }
-            & git push -q $remote main
-            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
-            Write-Host "  push to '$remote' did not go through - trying the next remote." -ForegroundColor Yellow
-        }
-        if (-not $pushed) { throw "git push failed - push it by hand from $app" }
-        Write-Host "PUBLISHED - phones pick it up on their next start with internet." -ForegroundColor Green
-    }
 } finally { Pop-Location }
+
+if (-not $dirty) {
+    Write-Host "Nothing changed - the app on the server is already up to date." -ForegroundColor Green
+} else {
+    Write-Host "Publishing the app..." -ForegroundColor Cyan
+    . (Join-Path $ScriptDir "git_publish.ps1")
+    if (Publish-Repo -RepoDir $app -Message $Message) {
+        Write-Host "PUBLISHED - phones pick it up on their next start with internet." -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host "NOT PUBLISHED. The change is on this PC only - phones keep the page they have." -ForegroundColor Red
+        Write-Host "Fix the login and push by hand:  cd $app ; git push" -ForegroundColor Red
+        exit 1
+    }
+}
 
 if ($WaitForUrl) {
     Write-Host "Waiting for the page to go live..." -ForegroundColor Cyan
