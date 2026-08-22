@@ -84,7 +84,13 @@ const T = {
     this.check("manifest: valid accepted", !threw);
     threw = false;
     try { Cloud.validateManifest({ versions: [] }); } catch (e) { threw = true; }
-    this.check("manifest: empty rejected", threw);
+    /* An empty list means "nothing published for this company right now".
+       Rejecting it sent the app to the copy saved on the device, which brought
+       a withdrawn release back as "Latest". */
+    this.check("manifest: an EMPTY list is accepted (nothing published)", !threw);
+    threw = false;
+    try { Cloud.validateManifest({ versions: "nope" }); } catch (e) { threw = true; }
+    this.check("manifest: a malformed list is still rejected", threw);
     threw = false;
     try { Cloud.validateManifest({ versions: [{ version: "1", controller: { url: "c.bin" } }] }); }
     catch (e) { threw = true; }
@@ -155,6 +161,20 @@ const T = {
         Cloud.channelize("https://x/main/manifest.json", "ksp") === "https://x/main/customers/ksp/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "danway") === "firmware/customers/danway/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "default") === "firmware/manifest.json");
+      /* Withdrawing every release must not resurrect the withdrawn one. An
+       * empty list used to be rejected as "malformed", which made the app
+       * fall back to the copy saved on the device and show it as Latest. */
+      {
+        const empty = { product: "GATA Controller", channel: APP_CONFIG.channel,
+                        customer: "X", updated: "2026-01-01", versions: [] };
+        let threw = false;
+        try { Cloud.validateManifest(empty); } catch (e) { threw = true; }
+        this.check("cloud: an empty firmware list is a valid answer, not a failure", !threw);
+        let threwBad = false;
+        try { Cloud.validateManifest({ versions: "nope" }); } catch (e) { threwBad = true; }
+        this.check("cloud: a malformed list is still refused", threwBad);
+      }
+
       /* A company's own app (c\<id>\) is configured with its channel manifest
        * already spelled out; adding the folder a second time made a 404 and
        * that app could not see its firmware list at all. */
@@ -292,8 +312,12 @@ const T = {
     {
       /* (1) firmware that ships WITH the app - what puts binaries on a phone */
       const bi = await (await fetch("../builtin.json", { cache: "no-store" })).json();
+      /* The listing must exist and be well formed. It may legitimately be
+         EMPTY: an app whose releases were all withdrawn carries no firmware
+         and updates from the cloud only. */
       this.check("built-in: the app publishes a listing of the firmware it carries",
-        Array.isArray(bi.main_firmware) && bi.main_firmware.length > 0);
+        Array.isArray(bi.main_firmware) && Array.isArray(bi.cloud_firmware));
+      const carries = bi.main_firmware.length > 0;
       const swsrc2 = await (await fetch("../sw.js", { cache: "no-store" })).text();
       this.check("built-in: the service worker stores that firmware on the device at first run",
         /cacheBuiltinFirmware/.test(swsrc2) && /builtin\.json/.test(swsrc2) &&
@@ -621,10 +645,15 @@ const T = {
     try {
       LocalSource.BASE = "../";                 // tests page lives in tests/
       const found = await LocalSource.scan();
-      this.check("local: live scan finds system + controller in main_firmware",
-        !!found.system && found.mains.length >= 1,
-        JSON.stringify({ system: found.system, mains: found.mains.map(m => m.name) }));
-      this.check("local: live scan finds complete cloud_firmware set", found.espComplete === true);
+      /* This app may carry no firmware at all (everything withdrawn). What
+         must always hold is that the scan AGREES with what is on disk. */
+      const listing = await (await fetch("../builtin.json", { cache: "no-store" })).json();
+      const wantMain = listing.main_firmware.length, wantEsp = listing.cloud_firmware.length;
+      this.check("local: live scan agrees with the listing for main_firmware",
+        (wantMain === 0) === (!found.system && found.mains.length === 0),
+        JSON.stringify({ listed: wantMain, system: found.system, mains: found.mains.map(m => m.name) }));
+      this.check("local: live scan agrees with the listing for cloud_firmware",
+        found.espComplete === (wantEsp === 4));
     } catch (e) {
       this.check("local: live scan", false, e.message);
     }

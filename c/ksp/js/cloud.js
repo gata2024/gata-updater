@@ -171,7 +171,15 @@ const Cloud = {
     manifest._baseUrl = new URL(url, location.href);
     manifest._rawBytes = bytes;                 // kept for the offline fallback
     manifest._rawSig = this._lastSigB64 || null;
-    Util.ok("Firmware list loaded: " + manifest.versions.length + " version(s) available.");
+    if (manifest.versions.length) {
+      Util.ok("Firmware list loaded: " + manifest.versions.length + " version(s) available.");
+    } else {
+      /* Said plainly, because it is a deliberate state: everything was taken
+       * back off the cloud. The app can still install from files on this
+       * device - it just has nothing to download. */
+      Util.warn("The firmware list is empty - nothing is published for " +
+                (manifest.customer || "this company") + " right now.");
+    }
     return manifest;
   },
 
@@ -234,10 +242,15 @@ const Cloud = {
 
   /* Structural validation with actionable errors (run before anything trusts it). */
   validateManifest(m) {
-    if (!m || !Array.isArray(m.versions) || !m.versions.length) {
-      throw new UploaderError("The firmware list is empty or malformed.",
-        "The manifest must contain a non-empty \"versions\" array.");
+    if (!m || !Array.isArray(m.versions)) {
+      throw new UploaderError("The firmware list is malformed.",
+        "The manifest must contain a \"versions\" array.");
     }
+    /* An EMPTY list is a real answer, not a failure: it means nothing is
+     * published for this company right now. Treating it as an error made the
+     * app fall through to the copy saved on this device - so withdrawing
+     * every release from a channel brought the withdrawn version back as
+     * "Latest", which is the one outcome a withdrawal must never have. */
     m.versions.forEach((v, i) => {
       const where = "versions[" + i + "]";
       if (!v.version) throw new UploaderError("Manifest error: " + where + " has no \"version\".");
