@@ -16,6 +16,10 @@ param(
     [string]$System,
     [string]$EspDir,
     [switch]$NoEsp,
+    # No firmware inside the app at all: customers download from the cloud
+    # every time. Anything already inside is removed, so what the app offers
+    # is never something nobody chose.
+    [switch]$NoFirmware,
     [ValidateSet("rev5", "rev6", "all")] [string]$Board = "rev6",
     [string]$Company = "General"
 )
@@ -53,9 +57,11 @@ function Put([string]$src, [string]$folder, [string]$destName) {
 }
 
 $n = 0
-if (Put $Controller "main_firmware" ("controller_" + $tag + ".bin")) { $n++ }
-if (Put $System     "main_firmware" ("system_"     + $tag + ".bin")) { $n++ }
-if (-not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
+if (-not $NoFirmware) {
+  if (Put $Controller "main_firmware" ("controller_" + $tag + ".bin")) { $n++ }
+  if (Put $System     "main_firmware" ("system_"     + $tag + ".bin")) { $n++ }
+}
+if (-not $NoFirmware -and -not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
     foreach ($part in @("bootloader.bin", "partitions.bin", "boot_app0.bin", "firmware.bin")) {
         if (Put (Join-Path $EspDir $part) "cloud_firmware" $part) { $n++ }
         else { Write-Host "      ! missing ESP file: $part" -ForegroundColor Yellow }
@@ -65,8 +71,12 @@ if (-not $NoEsp -and $EspDir -and (Test-Path $EspDir)) {
 $rec = [ordered]@{ company = $Company; board = $Board;
                    built = (Get-Date -Format "yyyy-MM-dd HH:mm");
                    files = $receipt; built_times = $builtAt }
-[IO.File]::WriteAllText((Join-Path $app "firmware_receipt.json"),
-                        ($rec | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+if ($NoFirmware) {
+    Remove-Item (Join-Path $app "firmware_receipt.json") -Force -ErrorAction SilentlyContinue
+} else {
+    [IO.File]::WriteAllText((Join-Path $app "firmware_receipt.json"),
+                            ($rec | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
+}
 
 $bi = [ordered]@{
     note = "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet."
@@ -78,7 +88,15 @@ $bi = [ordered]@{
 [IO.File]::WriteAllText((Join-Path $app "builtin.json"),
                         ($bi | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))
 
-Write-Host "   $n file(s) inside the app  (+ builtin.json, firmware_receipt.json)"
+if ($NoFirmware) {
+    if ((Get-ChildItem $mainDir  -Filter *.bin).Count -ne 0 -or
+        (Get-ChildItem $cloudDir -Filter *.bin).Count -ne 0) {
+        throw "firmware is still inside the app - it was NOT emptied."
+    }
+    Write-Host "   firmware   : NONE - this app downloads from the cloud every time." -ForegroundColor Yellow
+} else {
+    Write-Host "   $n file(s) inside the app  (+ builtin.json, firmware_receipt.json)"
+}
 Write-Host ""
 Write-Host "Now bump APP_CONFIG.version and deploy, or installed phones keep the copy they already stored." -ForegroundColor Yellow
 exit 0

@@ -29,9 +29,9 @@ class ReleaseManager : Form
 
     // ---- controls ---------------------------------------------------------
     ComboBox cboCustomer;
-    CheckBox chkRev5, chkRev6, chkSystem, chkEsp;
+    CheckBox chkRev5, chkRev6, chkSystem, chkEsp, chkInApp;
     TextBox txtCtrl, txtSys, txtEsp, txtNotes, txtLog, txtDest;
-    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk, btnBuiltIn;
+    Button btnPublish, btnBuildFolder, btnNewCompany, btnBackup, btnOpenGuide, btnRefresh, btnCheck, btnRemove, btnRefreshCloud, btnApk;
     ListView lstCloud, lstFiles;
     Label lblFiles;
     /* The raw JSON of each listed version, kept so the file table can be filled
@@ -216,6 +216,24 @@ class ReleaseManager : Form
         y += 24;
         lblEspFp = FpLabel(y); y += 26;
 
+        /* Firmware inside the app is a PROPERTY of the release, not a separate
+         * errand - so it is a tick here with the other files, and PUBLISH acts
+         * on it. Unticked means the app carries nothing and every customer
+         * downloads from the cloud each time they need it. */
+        chkInApp = new CheckBox
+        {
+            Left = 24, Top = y + 2, Width = 470, Checked = true,
+            Text = "Put this firmware inside the app (so a phone can install with no internet)"
+        };
+        toolTip.SetToolTip(chkInApp,
+            "Ticked: the same files go inside this company's app and it is published,\n" +
+            "so their phone stores them and can update a controller with no internet.\n\n" +
+            "Unticked: the app carries NO firmware - it downloads from the cloud every\n" +
+            "time, and cannot install anything without a connection.\n\n" +
+            "Either way the release itself goes to the cloud.");
+        Controls.Add(chkInApp);
+        y += 30;
+
         Controls.Add(new Label { Left = 24, Top = y + 3, Width = 150, Text = "What changed (notes)" });
         txtNotes = new TextBox { Left = 178, Top = y, Width = 666 };
         Controls.Add(txtNotes);
@@ -247,9 +265,11 @@ class ReleaseManager : Form
         btnApk = Mk("ANDROID APP (.apk)", 684, y, 160, (s, e) => BuildApk());
         btnApk.Height = 34;
         y += 40;
-        btnBuiltIn = Mk("FIRMWARE INSIDE THE APP", 24, y, 200, (s, e) => RefreshBuiltIn());
-        btnBackup = Mk("Back up keys", 234, y, 120, (s, e) => BackupKeys());
-        btnOpenGuide = Mk("Guide", 364, y, 80, (s, e) => OpenGuide());
+        /* No FIRMWARE INSIDE THE APP button any more - it is the tick in
+         * section 3, applied by PUBLISH, so there is one action instead of a
+         * button somebody had to remember to press afterwards. */
+        btnBackup = Mk("Back up keys", 24, y, 120, (s, e) => BackupKeys());
+        btnOpenGuide = Mk("Guide", 154, y, 80, (s, e) => OpenGuide());
         y += 36;
 
         // ---------------- 5. what is in the cloud right now ----------------
@@ -901,7 +921,6 @@ class ReleaseManager : Form
         bar.Visible = on;
         btnPublish.Enabled = btnBuildFolder.Enabled = btnNewCompany.Enabled = btnBackup.Enabled = !on;
         if (btnApk != null) btnApk.Enabled = !on;
-        if (btnBuiltIn != null) btnBuiltIn.Enabled = !on;
         if (btnRemove != null) btnRemove.Enabled = !on;
         Cursor = on ? Cursors.WaitCursor : Cursors.Default;
     }
@@ -1014,8 +1033,25 @@ class ReleaseManager : Form
         if (chkEsp.Checked && !Directory.Exists(txtEsp.Text)) { MessageBox.Show("ESP32 build folder not found:\n" + txtEsp.Text, "Folder missing"); return; }
 
         string who = Pretty(channel == "default" ? "General" : channel);
+
+        /* An app holds ONE controller binary, so if both boards are being
+         * published the firmware inside the app has to be one of them. */
+        string inAppBoard = null;
+        if (chkInApp.Checked)
+        {
+            inAppBoard = boards.Count == 1 ? boards[0] : AskBoard("An app");
+            if (inAppBoard == null) return;
+        }
+
+        string appLine = chkInApp.Checked
+            ? "The same firmware also goes INSIDE " + who + "'s app (" + inAppBoard + "),\n" +
+              "so their phone can install it with no internet."
+            : "Their app will carry NO firmware - anything already inside it is\n" +
+              "removed, and they download from the cloud every time.";
+
         if (MessageBox.Show("Publish for " + who + " (" + string.Join(" + ", boards) + ")?\n\n" +
-                            "This uploads to the cloud and every " + who + " updater will see it.",
+                            "This uploads to the cloud and every " + who + " updater will see it.\n\n" +
+                            appLine,
                             "Publish", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 
         Busy(true);
@@ -1043,10 +1079,17 @@ class ReleaseManager : Form
                     int rc = RunPs("publish_firmware.ps1", a.ToString());
                     if (rc != 0) { Status("FAILED for " + board + " - see the log."); Busy(false); return; }
                 }
+                /* The firmware inside the app, from the same tick that chose it
+                 * - written AND published, so nothing is left half-done. */
+                ApplyFirmwareInsideApp(channel, who, inAppBoard);
+
                 Status("Published. Customers see it on their next start.");
                 BeginInvoke((Action)LoadCloudList);
                 Log("");
                 Log("=== DONE. Published for " + who + ": " + string.Join(", ", boards) + " ===");
+                Log(chkInApp.Checked
+                    ? "   their app carries this firmware too - it installs with no internet."
+                    : "   their app carries NO firmware - they download from the cloud each time.");
             }
             catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
             finally { Busy(false); }
@@ -1757,152 +1800,65 @@ class ReleaseManager : Form
         }) { IsBackground = true }.Start();
     }
 
-    /* Put the chosen firmware INSIDE the app itself: the files land in the
-     * app's own main_firmware\ / cloud_firmware\ and are listed in
-     * builtin.json, which the phone app stores on the device at first start.
-     * From then on that phone can update a controller with no internet.
-     * Deploy the app afterwards for phones to pick it up. */
-    void RefreshBuiltIn()
+    /* The firmware inside a company's app, driven by the tick in section 3.
+     *
+     * Ticked  : the same files go into their app and it is published, so the
+     *           phone stores them and installs with no internet.
+     * Unticked: the app is left carrying NOTHING - whatever was inside is
+     *           removed - so every install downloads from the cloud.
+     *
+     * Either way the app is published, because writing it here changes
+     * nothing for a phone until it is.
+     *
+     * General is the site root (there is no c\default), so it has its own
+     * script; every other company is a page under c\. */
+    void ApplyFirmwareInsideApp(string channel, string who, string board)
     {
-        string chan = SelectedChannel();
-        string whoSel = chan == "default" ? "General" : Pretty(chan);
+        bool include = chkInApp.Checked;
+        Log("");
+        Log(include
+            ? "=== firmware inside " + who + "'s app (" + board + ") ==="
+            : "=== " + who + "'s app: removing the firmware inside it ===");
 
-        /* Unticking the cloud module does not merely "skip" it - what is listed
-         * must be what is there, so ESP firmware already inside the app is
-         * REMOVED. That happened for real and nothing said a word, leaving an
-         * app with no cloud-module firmware at all. Say it in the question. */
-        string espLine = chkEsp.Checked && Directory.Exists(txtEsp.Text)
-            ? "The cloud module (ESP32) firmware is included."
-            : "WARNING: 'Cloud module (ESP32)' is not ticked, so any ESP32\n" +
-              "firmware already inside this app will be REMOVED.";
-
-        /* One app holds ONE controller binary, so exactly one board. */
-        string board = AskBoard("An app");
-        if (board == null) return;
-
-        /* Each company has its OWN app now (c\<id>\), so the firmware has to go
-         * into that company's copy. Writing it into the site root - which is
-         * the General app - would have put, say, Danway's firmware inside the
-         * app every General customer downloads, under a Danway name. */
-        if (chan != "default")
+        string a;
+        if (channel == "default")
         {
-            if (Ask("Put the firmware chosen above inside " + whoSel + "'s app (" + board + ")?\n\n" +
-                    "It goes into c\\" + chan + " - " + whoSel + "'s own copy of the app,\n" +
-                    "which is what their .apk opens. General's app is not touched.\n\n" +
-                    espLine + "\n\n" +
-                    "Deploy afterwards (git push) so their phones receive it.",
-                    "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OKCancel,
-                    MessageBoxIcon.Question) != DialogResult.OK) return;
-
-            Busy(true);
-            new Thread(() =>
+            a = "-Company \"" + who + "\"";
+            if (include)
             {
-                try
-                {
-                    Status("Putting the firmware inside " + whoSel + "'s app...");
-                    Log("");
-                    Log("=== firmware included with " + whoSel + "'s app (c\\" + chan + ") ===");
-                    RunPs("build_customer_site.ps1",
-                          "-Id " + chan + " -Name \"" + whoSel + "\" -Board " + board +
-                          " -Controller \"" + txtCtrl.Text + "\"" +
-                          (File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
-                          (chkEsp.Checked && Directory.Exists(txtEsp.Text)
-                               ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp"));
-                    bool ok = File.Exists(Path.Combine(AppDir, "c\\" + chan + "\\builtin.json"));
-                    /* The firmware inside an app lives on the WEBSITE, not in
-                     * the .apk - so writing it here changes nothing for a
-                     * phone until the app is published. Doing that by hand was
-                     * a step that could be forgotten, and a forgotten push
-                     * looks exactly like "the app has no firmware". */
-                    if (ok) { Status("Publishing " + whoSel + "'s app..."); DeployApp(whoSel + " app firmware", null); }
-                    Status(ok ? whoSel + "'s app carries this firmware, and it is published."
-                              : "Failed - see the log.");
-                    Ask(ok ? "Done - " + whoSel + "'s app now carries this firmware,\n" +
-                             "and it has been published.\n\n" +
-                             "Their phones pick it up the next time they open the app with\n" +
-                             "internet. The .apk itself does NOT need rebuilding."
-                           : "Could not build c\\" + chan + " - see the log.",
-                        "Firmware inside " + whoSel + "'s app", MessageBoxButtons.OK,
-                        ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-                }
-                catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
-                finally { Busy(false); }
-            }) { IsBackground = true }.Start();
-            return;
+                a += " -Board " + board +
+                     " -Controller \"" + txtCtrl.Text + "\"" +
+                     (File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
+                     (chkEsp.Checked && Directory.Exists(txtEsp.Text)
+                          ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp");
+            }
+            else a += " -NoFirmware";
+            RunPs("refresh_builtin.ps1", a);
+        }
+        else
+        {
+            a = "-Id " + channel + " -Name \"" + who + "\" -Board " + (board ?? "rev5");
+            if (include)
+            {
+                a += " -Controller \"" + txtCtrl.Text + "\"" +
+                     (File.Exists(txtSys.Text) ? " -System \"" + txtSys.Text + "\"" : "") +
+                     (chkEsp.Checked && Directory.Exists(txtEsp.Text)
+                          ? " -EspDir \"" + txtEsp.Text + "\"" : " -NoEsp");
+            }
+            else a += " -NoFirmware";
+            RunPs("build_customer_site.ps1", a);
         }
 
-        if (Ask("Put the firmware chosen above INSIDE the General app (" + board + ")?\n\n" +
-                "Phones that install the General app then carry this firmware and\n" +
-                "can update a controller with no internet.\n\n" +
-                espLine + "\n\n" +
-                "Deploy the app afterwards (git push) so phones receive it.",
-                "Firmware inside the app", MessageBoxButtons.OKCancel,
-                MessageBoxIcon.Question) != DialogResult.OK) return;
-
-        Busy(true);
-        new Thread(() =>
-        {
-            try
-            {
-                Status("Putting the firmware inside the app...");
-                Log("");
-                Log("=== firmware included with the app ===");
-                string mainDir = Path.Combine(AppDir, "main_firmware");
-                string cloudDir = Path.Combine(AppDir, "cloud_firmware");
-                Directory.CreateDirectory(mainDir);
-                Directory.CreateDirectory(cloudDir);
-                foreach (var f in Directory.GetFiles(mainDir, "*.bin")) File.Delete(f);
-                foreach (var f in Directory.GetFiles(cloudDir, "*.bin")) File.Delete(f);
-
-                string who = SelectedChannel() == "default" ? "General" : Pretty(SelectedChannel());
-                int n = CopySelectedFirmware(AppDir, who, board, txtCtrl.Text, txtSys.Text,
-                                             chkEsp.Checked ? txtEsp.Text : null, Log);
-
-                // the listing a static host (and the phone) can read
-                var sb = new StringBuilder();
-                sb.Append("{\n  \"note\": \"Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.\",\n");
-                Action<string, string> section = (folder, key) =>
-                {
-                    sb.Append("  \"").Append(key).Append("\": [");
-                    var files = Directory.GetFiles(Path.Combine(AppDir, folder), "*.bin")
-                                         .OrderBy(x => x).ToArray();
-                    for (int i = 0; i < files.Length; i++)
-                    {
-                        var fi = new FileInfo(files[i]);
-                        sb.Append(i == 0 ? "\n" : ",\n");
-                        sb.Append("    { \"name\": \"").Append(fi.Name).Append("\", \"size\": ").Append(fi.Length).Append(" }");
-                    }
-                    sb.Append(files.Length > 0 ? "\n  ]" : "]");
-                };
-                section("main_firmware", "main_firmware");
-                sb.Append(",\n");
-                section("cloud_firmware", "cloud_firmware");
-                sb.Append("\n}\n");
-                File.WriteAllText(Path.Combine(AppDir, "builtin.json"), sb.ToString(), new UTF8Encoding(false));
-
-                Log("   builtin.json written (" + n + " file(s) included with the app)");
-                Status("Publishing the General app...");
-                DeployApp("General app firmware", null);
-                Log("=== DONE ===");
-                Status("Firmware is inside the General app, and it is published.");
-                Ask("Done - the General app now carries this firmware,\n" +
-                    "and it has been published.\n\n" +
-                    "Phones pick it up the next time they open the app with internet.\n" +
-                    "The .apk itself does NOT need rebuilding.",
-                    "Firmware inside the app", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex) { Log("ERROR: " + ex.Message); Status("Failed - see the log."); }
-            finally { Busy(false); }
-        }) { IsBackground = true }.Start();
+        Status("Publishing " + who + "'s app...");
+        DeployApp(who + (include ? " app firmware" : " app: firmware removed"), null);
     }
 
-    // ---------------------------------------------------------------- backup
     /* PUBLISH and BUILD FOLDER do every ticked board - one release, one folder
      * each. An APP cannot: it holds ONE controller binary, so exactly one
-     * board has to be named. Both boxes are ticked by default, and the old
-     * code silently resolved that to rev5 - so a rev 6 controller was copied
-     * in under a name saying rev5. Ask instead of guessing. Returns null if
-     * the question is dismissed. */
+     * board has to be named. Both boxes are ticked by default, and resolving
+     * that silently to rev5 meant a rev 6 controller was copied in under a
+     * name saying rev5. Ask instead of guessing; null = the question was
+     * dismissed. */
     string AskBoard(string what)
     {
         if (chkRev5.Checked && !chkRev6.Checked) return "rev5";
@@ -1929,7 +1885,6 @@ class ReleaseManager : Form
             b6.Click += (s, e) => { picked = "rev6"; f.DialogResult = DialogResult.OK; };
             f.Controls.Add(b5);
             f.Controls.Add(b6);
-            f.CancelButton = null;
             if (InvokeRequired) return (string)Invoke(new Func<string>(() =>
             { return f.ShowDialog(this) == DialogResult.OK ? picked : null; }));
             return f.ShowDialog(this) == DialogResult.OK ? picked : null;

@@ -55,11 +55,14 @@ Double-click it in the uploader folder and do everything with buttons — no com
       Controllers already updated are not affected.</li>
   <li><b>CHECK A FOLDER</b> — re-checks a prepared customer folder: every .bin against its
       delivery receipt <i>and</i> against the files selected above.</li>
-  <li><b>FIRMWARE INSIDE THE APP</b> — puts the chosen .bin files <b>inside the app</b>, so a phone can
-      install with <b>no internet</b>. General writes the site root; a company writes their own page
-      (<code>c\&lt;channel&gt;\</code>). The phone still downloads it <b>once</b>, on its first launch with
-      internet, and keeps it from then on. <b>It publishes the app for you</b> — there is no git push to
-      remember. Unticking <i>Cloud module (ESP32)</i> <b>removes</b> the ESP firmware already inside that app.</li>
+  <li><b>Put this firmware inside the app</b> (the tick in section 3) — the same files also go
+      <b>inside that company's app</b> and it is published, so their phone stores them and can install
+      with <b>no internet</b>. General writes the site root; a company writes their own page
+      (<code>c\&lt;channel&gt;\</code>). The phone downloads them <b>once</b>, on its first launch with
+      internet, and keeps them.<br>
+      <b>Unticked:</b> the app carries <b>no</b> firmware — anything already inside is removed — so the
+      customer downloads from the cloud <b>every time</b> and cannot install without a connection.<br>
+      PUBLISH does this for you; there is no separate button and no git push to remember.</li>
   <li><b>ANDROID APP (.apk)</b> — builds <b>that company's</b> app: its own package name, its own page,
       its own license and its own built-in firmware
       (<code>dist\gata-updater.apk</code>, <code>dist\gata-updater-&lt;channel&gt;.apk</code>). It rebuilds
