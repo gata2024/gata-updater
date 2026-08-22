@@ -21,10 +21,10 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'com.gata.updater.danway',
+    applicationId: 'com.gata.updater',
     hostName: 'gata2024.github.io', // The domain being opened in the TWA.
-    launchUrl: '/gata-updater/c/danway/', // The start path for the TWA. Must be relative to the domain.
-    name: 'GATA Updater - Danway', // The application name.
+    launchUrl: '/gata-updater/', // The start path for the TWA. Must be relative to the domain.
+    name: 'GATA Firmware Updater', // The application name.
     launcherName: 'GATA Update', // The name shown on the Android Launcher.
     themeColor: '#0B57D0', // The color used for the status bar.
     themeColorDark: '#0B57D0', // The color used for the dark status bar.
@@ -52,9 +52,9 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "com.gata.updater.danway"
+    namespace "com.gata.updater"
     defaultConfig {
-        applicationId "com.gata.updater.danway"
+        applicationId "com.gata.updater"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode 10700
@@ -76,12 +76,12 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://gata2024.github.io/gata-updater/c/danway/app.webmanifest'
+            resValue "string", "webManifestUrl", 'https://gata2024.github.io/gata-updater/app.webmanifest'
         
 
         
             // This is used by Meta Quest.
-            resValue "string", "fullScopeUrl", 'https://gata2024.github.io/gata-updater/c/danway/'
+            resValue "string", "fullScopeUrl", 'https://gata2024.github.io/gata-updater/'
         
 
         

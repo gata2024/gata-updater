@@ -4,5 +4,10 @@
     { "name": "controller_22_08_26_General_rev5.bin", "size": 895716 },
     { "name": "system_22_08_26_General_rev5.bin", "size": 121036 }
   ],
-  "cloud_firmware": []
+  "cloud_firmware": [
+    { "name": "boot_app0.bin", "size": 8192 },
+    { "name": "bootloader.bin", "size": 17536 },
+    { "name": "firmware.bin", "size": 1269360 },
+    { "name": "partitions.bin", "size": 3072 }
+  ]
 }

@@ -2,7 +2,7 @@ GATA firmware delivery - what is inside this uploader
 =====================================================
 Company : General
 Board   : rev5
-Prepared: 2026-08-22 05:04
+Prepared: 2026-08-22 05:05
 
 These are the exact firmware files that were put in. The updater
 re-checks every one of them before installing and REFUSES to install
@@ -14,7 +14,20 @@ a file whose fingerprint does not match this list.
   main_firmware/system_22_08_26_General_rev5.bin
       fingerprint 8548540139623b8825ffe2e500b483e3d1dbeaab2567e815d8dd29f7682fa71f
       built       2026-08-21 05:17
+  cloud_firmware/bootloader.bin
+      fingerprint 095bbcc7357184f68144ab40b152e2f6d68fc9d07f642c17c7888c533ddc67d3
+      built       2026-08-19 07:39
+  cloud_firmware/partitions.bin
+      fingerprint aaae2888c5a6a348004b5b436f47abb25ae32e72d9003902955a998eda723edd
+      built       2026-08-19 07:39
+  cloud_firmware/boot_app0.bin
+      fingerprint f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0
+      built       2026-08-19 07:41
+  cloud_firmware/firmware.bin
+      fingerprint 8683fa958804b495153d8563168d05b9209cc2262b4539663d6070e58fdd1623
+      built       2026-08-19 07:39
 
 Source files these came from (on the release PC):
   controller : D:\emirates\saudi\makeLogicwork\gc22SramToflash\g_500\Debug\NPC20_mini.bin
   system     : D:\emirates\saudi\makeLogicwork\gc22SramToflash\USBupdaterCode_relbuild\Debug\Booster_phase.bin
+  cloud mod. : D:\emirates\saudi\makeLogicwork\gc22SramToflash\esp\.pio\build\esp32dev
