@@ -38,7 +38,7 @@ class ReleaseManager : Form
      * from the selection without re-reading and re-parsing the manifest. */
     readonly Dictionary<string, string> cloudBlocks = new Dictionary<string, string>();
     string lastBuiltFolder;
-    Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp;
+    Label lblStatus, lblCtrlFp, lblSysFp, lblEspFp, lblLog;
     ProgressBar bar;
     readonly ToolTip toolTip = new ToolTip();
 
@@ -159,7 +159,9 @@ class ReleaseManager : Form
         if (Headless) return;
 
         Text = "GATA Release Manager";
-        ClientSize = new Size(940, 700);   // height is recomputed from the content below
+        /* Both are recomputed from the content once it is laid out: the form
+         * column is a fixed 900, and the log takes whatever is beside it. */
+        ClientSize = new Size(940, 700);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(246, 248, 252);
         Font = new Font("Segoe UI", 9F);
@@ -336,9 +338,26 @@ class ReleaseManager : Form
         y += 22;
 
         const int LOG_H = 230, MARGIN = 14;
+        const int FORM_W = 900;          // the width every section above is laid out for
+
+        /* The technical log sits in the empty space to the RIGHT of the form.
+         * Underneath it needed a taller window than most screens have, and it
+         * was the first thing to be pushed off the bottom; beside the form it
+         * uses the width that was doing nothing and grows with the window. */
+        lblLog = new Label
+        {
+            Left = FORM_W + 16, Top = 44, Width = 300, Height = 18,
+            Text = "Technical log", ForeColor = Color.FromArgb(30, 70, 140),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
+        };
+        Controls.Add(lblLog);
+
         txtLog = new TextBox
         {
-            Left = 24, Top = y, Width = ClientSize.Width - 48, Height = LOG_H,
+            Left = FORM_W + 16, Top = 66,
+            Width = Math.Max(320, ClientSize.Width - FORM_W - 32),
+            Height = Math.Max(LOG_H, y - 66),
             Multiline = true, ScrollBars = ScrollBars.Both, WordWrap = false, ReadOnly = true,
             BackColor = Color.FromArgb(24, 30, 44), ForeColor = Color.FromArgb(210, 222, 240),
             Font = new Font("Consolas", 8.75F),
@@ -346,12 +365,10 @@ class ReleaseManager : Form
         };
         Controls.Add(txtLog);
 
-        /* Size the window from what is actually in it. The height used to be a
-         * fixed number chosen for an earlier layout - every section added since
-         * pushed the log off the bottom of the screen. The minimum keeps ~90 px
-         * of log visible, so it can never be squeezed away again. */
-        ClientSize = new Size(ClientSize.Width, y + LOG_H + MARGIN);
-        MinimumSize = new Size(880, Height - LOG_H + 90 + MARGIN);
+        /* Size the window from what is actually in it: as tall as the form
+         * needs, and wide enough for the form PLUS a usable log beside it. */
+        ClientSize = new Size(FORM_W + 16 + 420 + 16, y + MARGIN);
+        MinimumSize = new Size(FORM_W + 60, 620);
         /* Never open taller than the screen it is on. */
         var wa = Screen.FromControl(this).WorkingArea;
         if (Height > wa.Height) Height = wa.Height;
@@ -1209,8 +1226,17 @@ class ReleaseManager : Form
         if (Directory.Exists(dest))
         {
             bool empty = Directory.GetFileSystemEntries(dest).Length == 0;
-            bool isUploader = File.Exists(Path.Combine(dest, "index.html")) &&
-                              File.Exists(Path.Combine(dest, "CLICK_ME_START_ON_PC.bat"));
+            /* ANY of these means the folder is one of ours. Requiring BOTH
+             * index.html and the launcher meant a folder left half-built by a
+             * failed run - index.html already deleted - was refused for ever
+             * as "not an uploader folder", with no way forward but deleting it
+             * by hand. */
+            bool isUploader = false;
+            foreach (string mark in new[] { "index.html", "CLICK_ME_START_ON_PC.bat",
+                                            "GATA_Updater.exe", "builtin.json",
+                                            "firmware_receipt.json", "gata.license",
+                                            "FIRMWARE_INFO.txt", "app.webmanifest" })
+                if (File.Exists(Path.Combine(dest, mark))) { isUploader = true; break; }
             if (!empty && !isUploader)
             {
                 problems.Add("The folder already exists and does not look like an uploader folder: " + dest);
@@ -1219,8 +1245,35 @@ class ReleaseManager : Form
             }
             if (!empty)
             {
+                /* Check for a LOCKED file BEFORE deleting anything.
+                 *
+                 * Most often it is GATA_Updater.exe still serving the folder -
+                 * exactly what somebody testing it would have running. The old
+                 * code deleted what it could and swallowed the failures, so a
+                 * locked file left the folder half-erased and the next attempt
+                 * refused it as "not an uploader folder". Nothing is removed
+                 * now unless all of it can be. */
+                var locked = new List<string>();
+                foreach (string f in Directory.GetFiles(dest, "*", SearchOption.AllDirectories))
+                {
+                    try { using (File.Open(f, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { } }
+                    catch (IOException) { locked.Add(f.Substring(dest.Length).TrimStart('\\')); }
+                    catch (UnauthorizedAccessException) { /* read-only attribute - still deletable */ }
+                }
+                if (locked.Count > 0)
+                {
+                    problems.Add("Something in that folder is open, so it cannot be rebuilt:");
+                    foreach (string l in locked) problems.Add("   " + l);
+                    problems.Add("Close the updater running from it (CLICK_ME_START_ON_PC / " +
+                                 "GATA_Updater.exe) and any open file, then try again.");
+                    problems.Add("Nothing was changed - the folder is exactly as it was.");
+                    foreach (string p in problems) log("   !! " + p);
+                    return problems;
+                }
+
                 foreach (string d in Directory.GetDirectories(dest))
-                    try { Directory.Delete(d, true); } catch (Exception ex) { log("   ! could not remove old " + Path.GetFileName(d) + ": " + ex.Message); }
+                    try { Directory.Delete(d, true); }
+                    catch (Exception ex) { log("   ! could not remove old " + Path.GetFileName(d) + ": " + ex.Message); }
                 foreach (string f in Directory.GetFiles(dest))
                     try { File.Delete(f); } catch { }
                 log("   previous contents cleared.");
