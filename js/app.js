@@ -624,27 +624,21 @@ const App = {
   async preConnect() {
     if (this.demo()) return null;
     try {
-      const known = await Transport.reconnect();
-      if (known) { Util.info("Controller already approved on this device - connecting."); return { serial: known }; }
-      const dfu = await DfuSeDevice.getAuthorizedDevice();
-      if (dfu) { Util.info("Controller already approved and sitting in update mode."); return { dfu }; }
-
-      /* The same two-way choice the flow used to raise later, with the same
-       * poll: whichever way the board appears - update mode or running - it
-       * continues by itself, no click needed. */
+      /* ALWAYS ask, and ask FIRST - for every kind of install: UPDATE, update
+       * controller, update cloud module, controller + cloud, and erase.
+       *
+       * It used to answer itself whenever the browser already had permission
+       * for some controller, which took the decision away: a board sitting in
+       * update mode could not be chosen while an authorized serial port
+       * existed. There is also no automatic continue here any more, for the
+       * same reason - the person says which state the board is in, and that
+       * is the first thing that happens. */
       return await this.userGate(
         I18N.t("gate.run.btn"),
         I18N.t("gate.connect.text") + " " +
           I18N.t(Transport.isAndroid() ? "gate.connect.tipMobile" : "gate.connect.tipPc"),
         async () => ({ serial: await Transport.request() }),
-        { label: I18N.t("gate.boot.btn"), action: async () => ({ dfu: await DfuSeDevice.requestDevice() }) },
-        async () => {
-          const d = await DfuSeDevice.getAuthorizedDevice();
-          if (d) return { dfu: d };
-          const t = await Transport.reconnect();
-          if (t) return { serial: t };
-          return null;
-        });
+        { label: I18N.t("gate.boot.btn"), action: async () => ({ dfu: await DfuSeDevice.requestDevice() }) });
     } catch (e) {
       if (e && (e.name === "NotFoundError" || /No (device|port) selected/i.test(e.message))) {
         await this.explainEmptyPicker();
@@ -788,19 +782,16 @@ const App = {
        * second "connect" button appearing minutes later, after the download,
        * when the gesture is long gone. Already-approved controllers skip it
        * entirely and nothing is ever shown. */
-      /* Download FIRST, then ask which controller.
+      /* ASK FIRST, then download, then install - one thing at a time.
        *
-       * Running the two together looked faster on paper and was worse in the
-       * hand: the question and the device picker landed on top of download
-       * progress, every "no device picked" retry fought with the download
-       * messages, and a person could be tapping at a picker while the files
-       * were still arriving. One thing at a time - get the software, then ask
-       * for the controller, then install. */
-      const { pkg, version } = await this.getPackage(mode);
-
-      /* Only now: the software is here, so the two buttons are the only thing
-       * on screen and the next tap is the last one needed. */
+       * The question comes before everything else because it is the decision
+       * the whole update hangs on. It must not run AT THE SAME TIME as the
+       * download either: when it did, the picker and its "no device picked"
+       * retries landed on top of the download messages and the flow fell
+       * apart. So: answer the question, then fetch the software, then work. */
       const picked = await this.preConnect();
+
+      const { pkg, version } = await this.getPackage(mode);
 
       await Flows.runFullUpdate({
         mode, pkg, version,
@@ -987,17 +978,17 @@ const App = {
       this.setBusy(true);
       this.$("logCard").open = true;
       try {
-        /* The system firmware first, then the question - same order as an
-         * update, so the picker never lands on top of a download. It is only
-         * needed if the controller turns out to be in BOOT mode, where there
-         * is no bootloader yet to take the erase command, so a failure here is
-         * not fatal: a board merely running its old software never needs it. */
-        const got = await this.getPackage("system").catch(e => {
+        /* The question first here too. Only a board in BOOT mode needs the
+         * system firmware fetched (there is no bootloader on it yet to take
+         * the erase command), so asking first also means not downloading
+         * anything at all when the controller is simply running. */
+        const picked = await this.preConnect();
+        const needsSystem = !!(picked && picked.dfu) || !picked;
+        const got = !needsSystem ? null : await this.getPackage("system").catch(e => {
           Util.warn("Could not fetch the system firmware (" + e.message +
                     ") - BOOT mode will not be available for this erase.");
           return null;
         });
-        const picked = await this.preConnect();
         /* Show the same step rows an update uses, so the erase has a bar
            instead of a still screen for half a minute. */
         this.resetSteps("erase");

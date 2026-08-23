@@ -346,18 +346,31 @@ const T = {
       const body = (asrc2.match(/async onUpdate\(mode\)[\s\S]*?\n  \},/) || [""])[0];
       const iGate = body.indexOf("this.preConnect()");
       const iPkg = body.indexOf("this.getPackage(mode)");
-      /* The two connect buttons must NOT appear while the software is still
-         downloading: on a phone the picker and the "no device picked" retries
-         landed on top of the download messages and the flow fell apart. */
-      this.check("connect: the software is downloaded BEFORE the controller is asked for",
-        iPkg > 0 && iGate > iPkg);
+      /* The question comes FIRST - before the download and before any
+         connection - for every kind of install. It must still not run AT THE
+         SAME TIME as the download: when it did, the picker and its "no device
+         picked" retries landed on top of the download messages. */
+      this.check("connect: the controller is asked for BEFORE anything is downloaded",
+        iGate > 0 && iPkg > iGate);
       this.check("connect: nothing runs the download and the question together",
         !/pkgPromise/.test(body));
+      this.check("connect: it always asks - an already-approved controller does not skip the choice",
+        !/Controller already approved on this device/.test(asrc2) &&
+        /async preConnect\(\)[\s\S]{0,2200}gate\.boot\.btn/.test(asrc2));
+      const eraseBody = (asrc2.split('btnEraseApp")')[1] || "").slice(0, 2000);
+      const eGate = eraseBody.indexOf("this.preConnect()");
+      const ePkg = eraseBody.indexOf('this.getPackage("system")');
+      this.check("connect: erasing asks first too, and only downloads if that answer needs it",
+        eGate > 0 && ePkg > eGate && /needsSystem/.test(eraseBody));
       this.check("connect: the first question offers BOTH states (running / update mode)",
         /preConnect\(\)[\s\S]*?gate\.boot\.btn/.test(asrc2) &&
         /preConnect\(\)[\s\S]*?DfuSeDevice\.requestDevice\(\)/.test(asrc2));
-      this.check("connect: an already-approved controller is still used with no question",
-        /preConnect\(\)[\s\S]*?Transport\.reconnect\(\)[\s\S]*?getAuthorizedDevice\(\)/.test(asrc2));
+      /* Deliberately NOT silent any more: an already-approved controller used
+         to be taken without asking, which removed the choice - a board sitting
+         in update mode could not be picked while an authorized serial port
+         existed. Every install now starts with the question. */
+      this.check("connect: nothing answers the question on the person's behalf",
+        !/getAuthorizedDevice\(\)[\s\S]{0,200}return \{ dfu \}/.test(asrc2));
       const fsrc4 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
       this.check("connect: a board chosen in update mode at the click is not asked for again",
         /ctx\.preDfu/.test(fsrc4) && /_pickedDfu = ctx\.preDfu/.test(fsrc4));
