@@ -486,6 +486,9 @@ const App = {
       controller: ["esp"],
       cloud: ["app", "wipe"],
       both: [],
+      /* Erasing installs nothing - the only rows that mean anything are
+       * reaching the controller and the erase itself. */
+      erase: ["download", "system", "esp", "wipe", "finish"],
     }[mode || "both"] || [];
     // The memory-preparation row only exists on a first installation.
     const chk = this.$("chkFirstInstall");
@@ -982,13 +985,19 @@ const App = {
           return null;
         });
         const picked = await this.preConnect();
+        /* Show the same step rows an update uses, so the erase has a bar
+           instead of a still screen for half a minute. */
+        this.resetSteps("erase");
         await Flows.runEraseApp({
           demo: this.demo(),
           pkg: got ? got.pkg : null,
           board: this.board(),
           preConnected: picked && picked.serial ? picked.serial : null,
           preDfu: picked && picked.dfu ? picked.dfu : null,
-          ui: { step: () => {}, userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll) },
+          ui: {
+            step: (a, b, c, d) => this.step(a, b, c, d),
+            userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll),
+          },
           onDeviceLine: line => Util.dev("< " + line),
           onTick: sec => Util.info(I18N.t("d.extEraseSec", { t: Math.round(sec) })),
         });

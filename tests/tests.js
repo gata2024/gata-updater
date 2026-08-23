@@ -321,6 +321,23 @@ const T = {
       } catch (e) { /* reported below */ }
       this.check("erase: BOOT-mode erase completes without asking for the controller again",
         ranFromBoot && !askedAgain);
+
+      /* A chip erase reports nothing until it finishes, so the bar is an
+         estimate against how long it normally takes - it must move, and it
+         must not claim to be finished before the controller says so. */
+      this.check("erase: the progress estimate rises with time and never reaches full early",
+        Flows._erasedFraction(0, 35) > 0 &&
+        Flows._erasedFraction(10, 35) > Flows._erasedFraction(2, 35) &&
+        Flows._erasedFraction(35, 35) <= 0.95 &&
+        Flows._erasedFraction(999, 35) <= 0.95);
+      const fsrc6 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      const eraseFn = (fsrc6.match(/async runEraseApp\(ctx\)[\s\S]*?\n  \},/) || [""])[0];
+      this.check("erase: it drives a progress bar, and completes it only when done",
+        /_erasedFraction\(sec, 35\)/.test(eraseFn) &&
+        /step\("app", "done"[\s\S]{0,40}1\)/.test(eraseFn));
+      const asrc5 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      this.check("erase: the button shows the step rows instead of a still screen",
+        /resetSteps\("erase"\)/.test(asrc5) && /erase: \["download", "system", "esp", "wipe", "finish"\]/.test(asrc5));
     }
 
     /* ---------------- the connect choice comes FIRST, before the download */

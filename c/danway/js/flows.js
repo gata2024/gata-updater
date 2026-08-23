@@ -115,6 +115,18 @@ const Flows = {
     return false;
   },
 
+  /* A chip erase says NOTHING until it is finished - the controller is busy
+   * with the flash and cannot report a percentage. All that is really known is
+   * how long it has been going, so the bar is an ESTIMATE against how long
+   * this erase normally takes, and it deliberately stops short of full: the
+   * only thing that fills it is the controller actually answering. Without it
+   * the screen sat still for half a minute and looked frozen.
+   *
+   * expected: seconds a typical erase of that memory takes. */
+  _erasedFraction(sec, expected) {
+    return Math.min(0.95, Math.max(0.02, sec / expected));
+  },
+
   async _openDfu(ctx) {
     if (ctx.demo) return new MockDfuDevice();
     let dev = ctx._pickedDfu || null;      // already picked at the connect gate
@@ -568,7 +580,8 @@ const Flows = {
       /* Erase external flash FIRST - this closes the 15 s window for good. */
       step("app", "active", I18N.t("d.extErase"), 0);
       await bl.format(sec => step("app", "active",
-        I18N.t("d.extEraseSec", { t: Math.round(sec) }), null));
+        I18N.t("d.extEraseSec", { t: Math.round(sec) }),
+        this._erasedFraction(sec, 35)));
       this._ck();
       step("app", "active", I18N.t("d.extErased"), 0.15);
 
@@ -585,7 +598,8 @@ const Flows = {
         if ((bl.blVersion || 0) >= 0x0001000A) {
           step("wipe", "active", I18N.t("d.wipeStart"), null);
           await bl.formatData(sec => step("wipe", "active",
-            I18N.t("d.wipeSec", { t: Math.round(sec) }), null));
+            I18N.t("d.wipeSec", { t: Math.round(sec) }),
+            this._erasedFraction(sec, 60)));
           this._ck();
           step("wipe", "done", I18N.t("d.wipeDone"), 1);
         } else {
@@ -776,8 +790,14 @@ const Flows = {
         ? await this._establishUpdateMode(ctx, step)
         : await this._connectBootloader(ctx, { tries: 6, delay: 1200 });
       Util.warn("Erasing the controller software - the controller will then wait for a new one.");
-      await bl.format(sec => ctx.onTick && ctx.onTick(sec));
+      step("app", "active", I18N.t("d.extErase"), 0.02);
+      await bl.format(sec => {
+        if (ctx.onTick) ctx.onTick(sec);
+        step("app", "active", I18N.t("d.extEraseSec", { t: Math.round(sec) }),
+             this._erasedFraction(sec, 35));
+      });
       this._ck();
+      step("app", "done", I18N.t("d.extErased"), 1);
       /* Do NOT restart it: with the software gone there is nothing to start,
        * and staying here means the next install can begin immediately. */
       Util.ok("Controller software erased. The controller is waiting in update mode - " +
