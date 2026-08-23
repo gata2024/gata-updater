@@ -539,12 +539,26 @@ const App = {
       Util.warn("WAITING FOR YOU: " + title);
       if (text) Util.info(text);
       let pollTimer = null;
+      let cancelTimer = null;
       let finish = (ok, value) => {
         if (pollTimer) clearInterval(pollTimer);
+        if (cancelTimer) clearInterval(cancelTimer);
         box.classList.add("hidden");
         btn.classList.remove("hidden");        // restore for any other user
         if (ok) resolve(value); else reject(value);
       };
+
+      /* CANCEL has to reach the gate too.
+       *
+       * This screen waits for a button press and nothing else, so pressing
+       * Cancel only set a flag that nobody here was watching: the log said
+       * "Cancelling…" and then the gate just sat there, still waiting, with
+       * the update neither running nor finished. Watch the flag and end the
+       * same way any other failure does, so the whole flow unwinds and the
+       * buttons come back. */
+      cancelTimer = setInterval(() => {
+        if (Flows.cancelRequested) finish(false, new UploaderError(I18N.t("err.cancelled")));
+      }, 200);
       /* Never leave the buttons dead. Disabling them while a device chooser is
        * open used to make later taps do NOTHING AT ALL if that chooser never
        * settled - which looks exactly like "the popup does not appear". */
@@ -640,6 +654,9 @@ const App = {
         async () => ({ serial: await Transport.request() }),
         { label: I18N.t("gate.boot.btn"), action: async () => ({ dfu: await DfuSeDevice.requestDevice() }) });
     } catch (e) {
+      /* Cancel is a decision, not a hiccup - carrying on regardless would
+       * start the very update that was just called off. */
+      if (Flows.cancelRequested) throw e;
       if (e && (e.name === "NotFoundError" || /No (device|port) selected/i.test(e.message))) {
         await this.explainEmptyPicker();
       } else {
@@ -824,6 +841,11 @@ const App = {
   async onUpdate(mode) {
     if (this.busy) return;
     if (!this.requireLicense()) return;
+    /* Clear any cancel left over from a previous attempt. The flag used to be
+     * reset inside runFullUpdate, which is now reached only AFTER the connect
+     * question - so a cancelled run left the flag set and the next press was
+     * cancelled before it began. */
+    Flows.cancelRequested = false;
     this.setBusy(true);
     this.resetSteps(mode);
     try {
@@ -1026,6 +1048,7 @@ const App = {
       if (this.busy) return;
       if (!this.requireLicense()) return;
       if (!confirm(I18N.t("adv.eraseConfirm"))) return;
+      Flows.cancelRequested = false;
       this.setBusy(true);
       this.$("logCard").open = true;
       try {

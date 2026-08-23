@@ -371,6 +371,17 @@ const T = {
          existed. Every install now starts with the question. */
       this.check("connect: nothing answers the question on the person's behalf",
         !/getAuthorizedDevice\(\)[\s\S]{0,200}return \{ dfu \}/.test(asrc2));
+      /* Cancel has to reach the connect question. That screen waits for a
+         button press and nothing else, so pressing Cancel only set a flag
+         nobody watched: the log said "Cancelling…" and the gate sat there. */
+      this.check("cancel: the connect question watches for a cancel and ends",
+        /cancelTimer = setInterval/.test(asrc2) &&
+        /Flows\.cancelRequested\) finish\(false/.test(asrc2));
+      this.check("cancel: a cancelled run does not poison the next press",
+        (asrc2.match(/Flows\.cancelRequested = false;/g) || []).length >= 2);
+      this.check("cancel: cancelling ABORTS instead of quietly continuing",
+        /if \(Flows\.cancelRequested\) throw e;/.test(asrc2));
+
       const fsrc4 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
       this.check("connect: a board chosen in update mode at the click is not asked for again",
         /ctx\.preDfu/.test(fsrc4) && /_pickedDfu = ctx\.preDfu/.test(fsrc4));
