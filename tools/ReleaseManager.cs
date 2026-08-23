@@ -21,6 +21,12 @@ using System.Windows.Forms;
 
 class ReleaseManager : Form
 {
+    /* The form occupies a fixed column of this width; the technical log fills
+     * whatever is to the right of it. Sections must size themselves from THIS,
+     * not from the window - reading ClientSize.Width made the cloud list and
+     * its buttons stretch straight across the log. */
+    const int FORM_W = 900;
+
     // ---- paths ------------------------------------------------------------
     static string AppDir;        // ...\GATA_Cloud_Uploader
     static string ToolsDir;      // ...\tools
@@ -280,7 +286,7 @@ class ReleaseManager : Form
         {
             Left = 24, Top = y, Width = 700, Height = 120, View = View.Details,
             FullRowSelect = true, MultiSelect = false, HideSelection = false,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
         lstCloud.Height = 96;
         lstCloud.Columns.Add("Version", 260);
@@ -293,13 +299,13 @@ class ReleaseManager : Form
 
         /* Anchored to the RIGHT edge: with Top|Left they stayed put while the
          * list stretched on a wide window and swallowed them. */
-        btnRemove = Mk(ClientSize.Width - 164, y, 140, "Remove selected", (s, e) => RemoveSelected());
+        btnRemove = Mk(FORM_W - 164, y, 140, "Remove selected", (s, e) => RemoveSelected());
         btnRemove.Height = 30;
         btnRemove.ForeColor = Color.FromArgb(170, 30, 30);
-        btnRemove.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        btnRefreshCloud = Mk(ClientSize.Width - 164, y + 36, 140, "Refresh", (s, e) => LoadCloudList());
-        btnRefreshCloud.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        lstCloud.Width = ClientSize.Width - 24 - 164 - 10;
+        btnRemove.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        btnRefreshCloud = Mk(FORM_W - 164, y + 36, 140, "Refresh", (s, e) => LoadCloudList());
+        btnRefreshCloud.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        lstCloud.Width = FORM_W - 24 - 164 - 10;
         y += 104;
 
         /* Every file in the selected release, spelled out: the published name,
@@ -315,9 +321,9 @@ class ReleaseManager : Form
         y += 18;
         lstFiles = new ListView
         {
-            Left = 24, Top = y, Width = ClientSize.Width - 24 - 164 - 10, Height = 132,
+            Left = 24, Top = y, Width = FORM_W - 24 - 164 - 10, Height = 132,
             View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false,
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            Anchor = AnchorStyles.Top | AnchorStyles.Left
         };
         lstFiles.Columns.Add("What", 90);
         lstFiles.Columns.Add("Published as", 250);
@@ -338,7 +344,6 @@ class ReleaseManager : Form
         y += 22;
 
         const int LOG_H = 230, MARGIN = 14;
-        const int FORM_W = 900;          // the width every section above is laid out for
 
         /* The technical log sits in the empty space to the RIGHT of the form.
          * Underneath it needed a taller window than most screens have, and it
@@ -369,6 +374,11 @@ class ReleaseManager : Form
          * needs, and wide enough for the form PLUS a usable log beside it. */
         ClientSize = new Size(FORM_W + 16 + 420 + 16, y + MARGIN);
         MinimumSize = new Size(FORM_W + 60, 620);
+        /* The log spans the full height of the finished window - its own
+         * height had been guessed from the layout position before the window
+         * was sized, which left it ending part-way down. */
+        txtLog.Width = ClientSize.Width - txtLog.Left - MARGIN;
+        txtLog.Height = ClientSize.Height - txtLog.Top - MARGIN;
         /* Never open taller than the screen it is on. */
         var wa = Screen.FromControl(this).WorkingArea;
         if (Height > wa.Height) Height = wa.Height;

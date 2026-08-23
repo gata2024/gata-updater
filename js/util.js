@@ -72,7 +72,25 @@ const Util = {
   ok(msg) { this.log(msg, "ok"); },
   warn(msg) { this.log(msg, "warn"); },
   err(msg) { this.log(msg, "err"); },
-  dev(msg) { this.log(msg, "dev"); },   // device -> host traffic
+
+  /* Protocol traffic - the commands sent to the controller and the lines it
+   * sends back.
+   *
+   * OFF unless someone deliberately turns it on. Printing it put the whole
+   * command set of the bootloader on screen in front of any customer, which
+   * is not theirs to read: it is a map of how to drive the board directly.
+   * The messages a person actually needs ("Application verified", "External
+   * flash erased") are ordinary log lines and are unaffected.
+   *
+   * Turn it on for a session with:  localStorage.setItem("gata.trace","1")
+   * It still always goes to the browser console for support work. */
+  traceOn() {
+    try { return localStorage.getItem("gata.trace") === "1"; } catch (e) { return false; }
+  },
+  dev(msg) {
+    if (this.traceOn()) { this.log(msg, "dev"); return; }
+    console.log("[dev] " + String(msg));
+  },
 };
 
 /* Error type that carries a user-friendly hint on how to fix the problem. */

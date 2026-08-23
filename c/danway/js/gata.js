@@ -76,7 +76,9 @@ class GataBootloader {
   }
 
   async send(cmd) {
-    Util.info("> " + cmd);
+    /* The command itself is protocol traffic, not news for the person using
+     * the updater - it goes to the trace, which is off unless switched on. */
+    Util.dev("> " + cmd);
     await this.t.write(this._encoder.encode(cmd + "\n"));
   }
 
@@ -228,7 +230,7 @@ class GataBootloader {
   async enterBootloaderViaApp() {
     this.clear();
     const frame = "8321*?enterBootloader*?19*8*e*\r\n";
-    Util.info("> [app] enterBootloader (reboot into update mode)");
+    Util.dev("> [app] enterBootloader (reboot into update mode)");
     await this.t.write(this._encoder.encode(frame));
     try {
       await this.waitFor(["enterBootloaderAck"], 2500);
