@@ -161,6 +161,26 @@ const T = {
         Cloud.channelize("https://x/main/manifest.json", "ksp") === "https://x/main/customers/ksp/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "danway") === "firmware/customers/danway/manifest.json" &&
         Cloud.channelize("firmware/manifest.json", "default") === "firmware/manifest.json");
+      /* raw.githubusercontent caches the list for five minutes, so a release
+         published (or withdrawn) was invisible until that expired. The same
+         file read through the API is not behind that cache. */
+      {
+        const raw = "https://raw.githubusercontent.com/gata2024/gata-firmware/main/customers/ksp/manifest.json";
+        const fresh = Cloud.freshUrl(raw);
+        this.check("cloud: a fresh, uncached address is derived for the firmware list",
+          fresh === "https://api.github.com/repos/gata2024/gata-firmware/contents/customers/ksp/manifest.json?ref=main",
+          fresh);
+        this.check("cloud: its signature is read from the SAME place, not the cached one",
+          fresh.replace("?", ".sig?") ===
+          "https://api.github.com/repos/gata2024/gata-firmware/contents/customers/ksp/manifest.json.sig?ref=main");
+        this.check("cloud: an address with no fresher form is left alone",
+          Cloud.freshUrl("firmware/manifest.json") === null &&
+          Cloud.freshUrl("https://example.com/manifest.json") === null);
+        const csrc = await (await fetch("../js/cloud.js", { cache: "no-store" })).text();
+        this.check("cloud: the cached address stays as the fallback",
+          /freshUrl\(url\)/.test(csrc) && /if \(!bytes\)/.test(csrc));
+      }
+
       /* Withdrawing every release must not resurrect the withdrawn one. An
        * empty list used to be rejected as "malformed", which made the app
        * fall back to the copy saved on the device and show it as Latest. */

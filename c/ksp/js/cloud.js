@@ -131,20 +131,70 @@ const Cloud = {
     return m;
   },
 
+  /* raw.githubusercontent serves with "Cache-Control: max-age=300", so for up
+   * to five minutes after publishing, every app in the world is still told the
+   * OLD list - a release looked missing, and taking one back looked ignored.
+   * The same file read through the API is not behind that cache.
+   *
+   * Returns the address to read a file FRESH, or null when there is no fresher
+   * way to read it than the address given. */
+  freshUrl(url) {
+    const m = /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(url);
+    if (!m) return null;
+    return "https://api.github.com/repos/" + m[1] + "/" + m[2] +
+           "/contents/" + m[4] + "?ref=" + m[3];
+  },
+
+  /* The bytes of a file, whichever address style it is. The API answers with a
+   * JSON envelope carrying the content base64-encoded; unwrapped here it is
+   * byte-for-byte the file itself, so the signature check is unaffected. */
+  async _fileBytes(url) {
+    const viaApi = url.indexOf("api.github.com") !== -1;
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: viaApi ? { "Accept": "application/vnd.github.v3+json" } : {},
+    });
+    if (!res.ok) {
+      const e = new Error("HTTP " + res.status);
+      e.status = res.status;
+      throw e;
+    }
+    if (!viaApi) return new Uint8Array(await res.arrayBuffer());
+    const j = await res.json();
+    const b = atob(String(j.content || "").replace(/\n/g, ""));
+    const out = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+    return out;
+  },
+
   async fetchManifestFrom(url) {
     Util.info("Loading firmware list from " + url + " ...");
-    let res;
-    try {
-      res = await fetch(url, { cache: "no-store" });
-    } catch (e) {
-      throw new UploaderError("Could not reach the firmware server (" + e.message + ").",
-        "Check the internet connection, or check the server address under Settings.");
+
+    /* Read it fresh when there is a way to; fall back to the plain address if
+     * that fails for any reason (rate limit, no network route to the API). */
+    let bytes = null;
+    const fresh = this.freshUrl(url);
+    if (fresh) {
+      try {
+        bytes = await this._fileBytes(fresh);
+        this._sigBase = fresh;
+      } catch (e) {
+        Util.dev("fresh read unavailable (" + e.message + ") - using the cached address.");
+      }
     }
-    if (!res.ok) {
-      throw new UploaderError("Firmware server answered " + res.status + " for " + url + ".",
-        "Check the server address under Settings.");
+    if (!bytes) {
+      this._sigBase = url;
+      try {
+        bytes = await this._fileBytes(url);
+      } catch (e) {
+        if (e.status) {
+          throw new UploaderError("Firmware server answered " + e.status + " for " + url + ".",
+            "Check the server address under Settings.");
+        }
+        throw new UploaderError("Could not reach the firmware server (" + e.message + ").",
+          "Check the internet connection, or check the server address under Settings.");
+      }
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
     if (APP_CONFIG.signingPublicKey) {
       await this._requireValidSignature(url, bytes);
     }
@@ -188,10 +238,18 @@ const Cloud = {
    * cannot make this app accept a foreign firmware list - and every file is
    * then checked against the SHA-256 hashes inside that verified list. */
   async _requireValidSignature(url, bytes) {
-    let res = null;
-    try { res = await fetch(url + ".sig", { cache: "no-store" }); } catch (e) { /* treated as missing */ }
-    if (!res || !res.ok) {
-      Util.err(I18N.t("err.sigMissing") + " (" + url + ".sig)");   // must appear in the support log
+    /* The signature has to come from the SAME place as the list it signs. Read
+     * fresh here but cached there (or the other way round) and a good release
+     * looks forged: a five-minute-old signature against a new list. */
+    const base = this._sigBase || url;
+    /* ".sig" goes on the FILE NAME, which on the API address sits before the
+     * query: .../contents/manifest.json.sig?ref=main */
+    const sigUrl = base.indexOf("?") !== -1 ? base.replace("?", ".sig?") : base + ".sig";
+
+    let raw = null;
+    try { raw = await this._fileBytes(sigUrl); } catch (e) { /* treated as missing */ }
+    if (!raw) {
+      Util.err(I18N.t("err.sigMissing") + " (" + sigUrl + ")");   // must appear in the support log
       const e = new UploaderError(I18N.t("err.sigMissing"), I18N.t("hint.sig"));
       e.fatal = true;                              // never fall back to another source
       throw e;
@@ -199,7 +257,7 @@ const Cloud = {
     let sig = null;
     let sigB64 = null;
     try {
-      sigB64 = (await res.text()).trim();
+      sigB64 = new TextDecoder().decode(raw).trim();
       sig = Uint8Array.from(atob(sigB64), c => c.charCodeAt(0));
     }
     catch (e) { /* malformed base64 -> invalid */ }
