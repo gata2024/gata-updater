@@ -301,7 +301,14 @@ const App = {
       main.className = "vmain";
       const name = document.createElement("div");
       name.className = "vname";
-      name.textContent = I18N.t("ver.prefix") + " " + v.version;
+      /* In its own element, not a bare text node: a text node inside a flex
+       * row is an anonymous item that will not shrink below the width of its
+       * longest word, so a name like 22_08_26_Danway_rev6 pushed straight
+       * through the size beside it on a phone. */
+      const label = document.createElement("span");
+      label.className = "vlabel";
+      label.textContent = I18N.t("ver.prefix") + " " + v.version;
+      name.appendChild(label);
       if (idx === 0 || v.latest) {
         const tag = document.createElement("span");
         tag.className = "tag latest"; tag.textContent = I18N.t("tag.latest");
@@ -316,26 +323,28 @@ const App = {
       notes.className = "vnotes";
       notes.textContent = v.notes || "";
       main.appendChild(name); main.appendChild(notes);
+      /* Each fact in its own element - not text separated by <br>. Hiding a
+       * <br> to re-flow this on a phone merged the neighbouring text runs into
+       * one item, so the date and the size printed with nothing between them
+       * ("2026-08-22874.7 KB"). */
       const meta = document.createElement("div");
       meta.className = "vmeta";
-      meta.textContent = v.date || "";
+      const addMeta = (text, cls) => {
+        if (!text) return;
+        const el = document.createElement("span");
+        el.className = cls;
+        el.textContent = text;
+        meta.appendChild(el);
+      };
+      addMeta(v.date, "vdate");
       /* The controller software, spelled out: how big it is and when it was
        * COMPILED - not when it was published. Releases carry both names for
        * the same file (the current "controller", the older "main"), and this
        * only ever looked at the old one, so the size never appeared at all on
        * anything published recently. */
       const ctrl = Cloud.controllerEntry(v);
-      if (ctrl && ctrl.size) {
-        meta.appendChild(document.createElement("br"));
-        meta.appendChild(document.createTextNode(Util.fmtBytes(ctrl.size)));
-      }
-      if (ctrl && ctrl.built) {
-        meta.appendChild(document.createElement("br"));
-        const b = document.createElement("span");
-        b.className = "vbuilt";
-        b.textContent = I18N.t("ver.built") + " " + ctrl.built;
-        meta.appendChild(b);
-      }
+      if (ctrl && ctrl.size) addMeta(Util.fmtBytes(ctrl.size), "vsize");
+      if (ctrl && ctrl.built) addMeta(I18N.t("ver.built") + " " + ctrl.built, "vbuilt");
       row.appendChild(radio); row.appendChild(main); row.appendChild(meta);
       list.appendChild(row);
     });
