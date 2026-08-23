@@ -1297,6 +1297,16 @@ class ReleaseManager : Form
         CopyTree(AppDir, dest);
         log("   app files copied.");
 
+        /* Out with the demo simulator. It exists to try the updater with no
+         * hardware attached, which nobody receiving this folder needs - and it
+         * spells out the controller's whole command set (INFO -> MCU:/BL:/
+         * EXTERNAL_FLASH:, READY_FOR_DATA, PROGRESS:...), which is exactly what
+         * the log was cleaned of. It is referenced in two places, and BOTH have
+         * to go: the service worker fills its offline cache atomically, so one
+         * missing file in that list would leave the folder with no offline
+         * copy at all. */
+        StripDemoSimulator(dest, log);
+
         /* tools\ is NOT copied wholesale (it holds signing_key.json and
          * license_key.json). The launcher needs exactly these few, so copy
          * just them - without this the .bat fails with
@@ -1318,19 +1328,11 @@ class ReleaseManager : Form
          * shared General app in a KSP folder would put a KSP customer on the
          * General channel, so the wrong one is never copied: either theirs is
          * here, or the folder goes out without an app and says so. */
-        string apkSrc = Path.Combine(AppDir, channel == "default"
-            ? @"dist\gata-updater.apk" : @"dist\gata-updater-" + channel + ".apk");
-        if (File.Exists(apkSrc))
-        {
-            File.Copy(apkSrc, Path.Combine(dest, "gata-updater.apk"), true);
-            log("   android app: " + Path.GetFileName(apkSrc) + "  (" +
-                File.GetLastWriteTime(apkSrc).ToString("yyyy-MM-dd HH:mm") + ")");
-        }
-        else
-        {
-            log("   ! no Android app for " + who + " yet - the folder is complete without it.");
-            log("     Build it with the ANDROID APP button while " + who + " is selected.");
-        }
+        /* No .apk in here. This folder is the PC updater; the phone app is a
+         * separate delivery (dist\gata-updater[-<channel>].apk) and putting a
+         * copy in was only confusing - the folder finishes instantly because
+         * it never built one, so the apk it carried was whatever happened to
+         * be lying in dist\ from some earlier run. */
 
         /* The offline files are simply the ones picked in the window. */
         int n = CopySelectedFirmware(dest, who, board, ctrlPath, sysPath, espDir, log);
@@ -1682,12 +1684,44 @@ class ReleaseManager : Form
     /* Internal notes and your own release tool - not part of the product. */
     static readonly string[] SkipFiles = {
         "gata.license",                     // replaced with THEIR license
-        "gata-updater.apk",                 // replaced with THEIR Android app (see below)
+        "gata-updater.apk",                 // the phone app is a separate delivery, not part of this folder
+        ".nojekyll",                        // a GitHub Pages marker - meaningless off the web host
         "GATA_Release_Manager.exe",         // your tool, never ship it
         "HOW_TO_RELEASE.html", "OPERATIONS.md", "README.md",
         "changes_from_rev5_to_rev6.json",
         ".gitignore", ".gitattributes"
     };
+
+    /* Remove js\mock.js from a built folder, and every reference to it. */
+    static void StripDemoSimulator(string dest, Action<string> log)
+    {
+        try
+        {
+            string mock = Path.Combine(dest, "js\\mock.js");
+            if (File.Exists(mock)) File.Delete(mock);
+
+            string idx = Path.Combine(dest, "index.html");
+            if (File.Exists(idx))
+            {
+                var kept = File.ReadAllLines(idx).Where(l => !l.Contains("js/mock.js")).ToArray();
+                File.WriteAllLines(idx, kept, new UTF8Encoding(false));
+            }
+
+            /* The service worker lists it in SHELL, and addAll() is all-or-
+             * nothing: leaving the name behind would make the offline cache
+             * fail every time. */
+            string sw = Path.Combine(dest, "sw.js");
+            if (File.Exists(sw))
+            {
+                string t = File.ReadAllText(sw);
+                t = t.Replace("\"js/mock.js\", ", "").Replace(", \"js/mock.js\"", "")
+                     .Replace("\"js/mock.js\",", "").Replace("\"js/mock.js\"", "");
+                File.WriteAllText(sw, t, new UTF8Encoding(false));
+            }
+            log("   demo simulator removed (js\\mock.js) - not needed to update a controller.");
+        }
+        catch (Exception ex) { log("   ! could not remove the demo simulator: " + ex.Message); }
+    }
 
     void CopyTree(string src, string dst)
     {
