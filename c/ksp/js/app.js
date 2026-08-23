@@ -653,6 +653,55 @@ const App = {
    * "I closed the list" produce the same error, and the causes are different:
    * on a phone it is nearly always the OTG cable, an unpowered controller, or
    * another app (the GATA HMI) already holding the device. */
+  /* Windows only, and only when the app is served by the uploader folder's own
+   * little server: ask that server whether the controller's update-mode driver
+   * is in place, and have it installed if it is not.
+   *
+   * A web page cannot look at Windows drivers, let alone install one - but the
+   * server is on the same PC, in the same folder, so it can. Without this the
+   * only way forward was for someone to find tools\INSTALL_DFU_DRIVER.bat and
+   * know to run it.
+   *
+   * Returns true when it installed the driver (so the caller stops explaining
+   * and the person can simply try again). */
+  async offerDriverInstall() {
+    if (!this.canUseLocal()) return false;          // hosted app: no server of ours
+    try {
+      const st = await (await fetch("__driver_status", { cache: "no-store" })).json();
+      if (!st || !st.present || st.bound) return false;   // not the driver's fault
+
+      Util.warn("The controller IS plugged in and in update mode, but Windows has no " +
+                "driver attached to it yet - that is why it does not appear in the list.");
+      Util.info("Installing it now - approve the Windows prompt, and that is the only thing " +
+                "you have to do. Nothing is downloaded; the board is pointed at the driver " +
+                "already built into Windows.");
+      const res = await (await fetch("__install_driver", { cache: "no-store" })).json();
+      if (res && res.ok) {
+        Util.ok("USB driver installed - press the same button again and the controller will be there.");
+        return true;
+      }
+      if (res && res.tool) {
+        /* Windows' own driver cannot be forced onto this board on Windows 11,
+         * so the bundled tool - which carries its own signed package - has
+         * been opened instead. Three clicks, once per PC. */
+        Util.warn("Windows could not attach its own driver to this board, so the driver tool " +
+                  "has been opened for you.");
+        Util.info("In that window: pick \"DFU in FS Mode\" at the top, make sure the driver on " +
+                  "the right says WinUSB, then press Install Driver. It takes a few seconds.");
+        Util.info("When it says success, come back here and press the same button again.");
+        return true;
+      }
+      Util.err("The driver was not installed: " + ((res && res.message) || "unknown reason") + ".");
+      Util.info("You can also do it by hand: run tools\\INSTALL_DFU_DRIVER.bat from this " +
+                "uploader folder with the board in update mode.");
+      return true;                                   // explained; no need to say more
+    } catch (e) {
+      /* An older folder has no such endpoint - fall through to the advice. */
+      Util.dev("driver check unavailable (" + e.message + ")");
+      return false;
+    }
+  },
+
   async explainEmptyPicker() {
     try {
       const seen = [];
@@ -679,6 +728,8 @@ const App = {
         Util.warn("The phone sees no controller. Check: the USB-OTG adapter is fully seated, " +
                   "the controller is powered, and no other app (the GATA HMI) is connected to it — " +
                   "close that app completely, then try again.");
+      } else if (Transport.isWindows() && await this.offerDriverInstall()) {
+        /* handled: the driver was missing and has just been installed */
       } else if (Transport.isWindows()) {
         /* On Windows a controller in update mode does not appear to the
          * browser at all until the driver is bound to it, so an empty list

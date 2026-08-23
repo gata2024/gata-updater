@@ -93,6 +93,70 @@ while ($true) {
             $status = "405 Method Not Allowed"
             $body = [System.Text.Encoding]::UTF8.GetBytes("method not allowed")
             $ctype = "text/plain"
+        } elseif ($path.EndsWith("/__driver_status")) {
+            # Is the controller's UPDATE-MODE driver in place?
+            #
+            # A web page cannot look at Windows drivers and cannot install one,
+            # so it asks this server - which is running on the same PC, from
+            # the same folder. Only ever reachable from 127.0.0.1.
+            #
+            # present : a board in update mode is plugged in right now
+            # bound   : WinUSB is attached to it, so the browser can open it
+            $st = [ordered]@{ platform = "windows"; present = $false; bound = $false; device = "" }
+            try {
+                $dev = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+                       Where-Object { $_.DeviceID -like "USB\VID_0483&PID_DF11*" } | Select-Object -First 1
+                if ($dev) {
+                    $st.present = $true
+                    $st.device = "$($dev.Name)"
+                    $st.bound = ($dev.Service -eq 'WINUSB')
+                }
+            } catch { }
+            $body = [System.Text.Encoding]::UTF8.GetBytes(($st | ConvertTo-Json -Compress))
+            $ctype = "application/json; charset=utf-8"
+        } elseif ($path.EndsWith("/__install_driver")) {
+            # Install it. The script self-elevates, so Windows shows ONE
+            # approval prompt; it binds Windows' own signed WinUSB driver and
+            # nothing is downloaded. Answers with the state afterwards, so the
+            # page can simply try the controller again.
+            $res = [ordered]@{ ok = $false; message = "" }
+            try {
+                $script = Join-Path $PSScriptRoot "install_dfu_driver.ps1"
+                if (-not (Test-Path $script)) {
+                    $res.message = "install_dfu_driver.ps1 is missing from tools\"
+                } else {
+                    # -Quiet: no "press ENTER to close" in that window, or this
+                    # request would wait for a keypress nobody is there to give.
+                    $null = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList @(
+                        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$script`"",
+                        "-NoElevate", "-Quiet")
+                    Start-Sleep -Seconds 2
+                    $dev = Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+                           Where-Object { $_.DeviceID -like "USB\VID_0483&PID_DF11*" } | Select-Object -First 1
+                    $res.ok = ($dev -and $dev.Service -eq 'WINUSB')
+                    if ($res.ok) { $res.message = "driver installed" }
+                    else {
+                        # Windows 11 ships no INF that can be forced onto this
+                        # device - its winusb.inf only matches boards that
+                        # advertise a WinUSB compatible ID, which the STM32 ROM
+                        # does not. The bundled driver tool carries its own
+                        # signed package and can, so open it for them rather
+                        # than leave them hunting for a file.
+                        $zadig = Join-Path $root 'windows-driver\zadig.exe'
+                        if (Test-Path $zadig) {
+                            try {
+                                Start-Process $zadig -Verb RunAs | Out-Null
+                                $res.message = "opened the driver tool - choose 'DFU in FS Mode', pick WinUSB and press Install Driver"
+                                $res.tool = $true
+                            } catch { $res.message = "could not open the driver tool: " + $_.Exception.Message }
+                        } else {
+                            $res.message = "no driver tool in this folder (windows-driver\zadig.exe is missing)"
+                        }
+                    }
+                }
+            } catch { $res.message = $_.Exception.Message }
+            $body = [System.Text.Encoding]::UTF8.GetBytes(($res | ConvertTo-Json -Compress))
+            $ctype = "application/json; charset=utf-8"
         } elseif ($path.EndsWith("/__local_list")) {
             # Firmware discovery for "local folder" mode: list the *.bin files
             # in main_firmware\ (B1/B3/M*) and cloud_firmware\ (ESP32 files)

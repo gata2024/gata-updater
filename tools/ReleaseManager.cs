@@ -1362,6 +1362,7 @@ class ReleaseManager : Form
         if (!Directory.Exists(mainDirChk) || Directory.GetFiles(mainDirChk, "system*.bin").Length == 0)
             problems.Add("MISSING: main_firmware\\system*.bin - the updater needs it for every action");
         foreach (string secret in new[] { @"tools\signing_key.json", @"tools\license_key.json",
+                                          @"tools\driver_signing_key.pfx",
                                           @"tools\licenses_issued.txt", @"tools\publish_firmware.ps1",
                                           @"tools\make_license.ps1", "GATA_Release_Manager.exe" })
             if (File.Exists(Path.Combine(dest, secret))) problems.Add("MUST NOT BE THERE: " + secret);
@@ -2017,6 +2018,7 @@ class ReleaseManager : Form
             Directory.CreateDirectory(dest);
             int n = 0;
             foreach (string rel in new[] { @"tools\signing_key.json", @"tools\license_key.json",
+                                           @"tools\driver_signing_key.pfx",
                                            @"tools\licenses_issued.txt", @"android\gata-release.keystore" })
             {
                 string src = Path.Combine(AppDir, rel);
