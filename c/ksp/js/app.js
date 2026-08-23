@@ -685,6 +685,19 @@ const App = {
         Util.warn("The phone sees no controller. Check: the USB-OTG adapter is fully seated, " +
                   "the controller is powered, and no other app (the GATA HMI) is connected to it — " +
                   "close that app completely, then try again.");
+      } else if (Transport.isWindows()) {
+        /* On Windows a controller in update mode does not appear to the
+         * browser at all until the driver is bound to it, so an empty list
+         * usually means the driver, not the cable. Saying "check the cable"
+         * here sent people hunting the wrong fault. */
+        Util.warn("No controller in the list. On Windows a controller in UPDATE MODE stays " +
+                  "invisible to the browser until its driver is installed — this is the most " +
+                  "common cause.");
+        Util.warn("Fix it once: with the board in update mode, run " +
+                  "tools\\INSTALL_DFU_DRIVER.bat from this uploader folder (it asks for " +
+                  "administrator once and uses Windows' own driver). Then try again.");
+        Util.info("If the driver is already installed: check the cable and that the controller " +
+                  "is powered, and close any other program using it.");
       } else {
         Util.warn("No controller visible on USB. Check the cable, and that the controller is powered.");
       }

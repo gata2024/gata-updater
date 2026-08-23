@@ -221,6 +221,17 @@ const Transport = {
     } catch (e) { /* fall through to the UA string */ }
     return /android/i.test(navigator.userAgent || "");
   },
+  /* Windows is the one platform where a controller in update mode is INVISIBLE
+   * to the browser until a driver is bound to it - it is not a cable fault and
+   * not a power fault, and saying so sends people hunting the wrong thing. */
+  isWindows() {
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.platform) {
+        return /windows/i.test(navigator.userAgentData.platform);
+      }
+    } catch (e) { /* fall through to the UA string */ }
+    return /windows/i.test(navigator.userAgent || "");
+  },
   useWebUsbFirst() {
     return this.isAndroid() && UsbCdcTransport.available();
   },
