@@ -46,6 +46,37 @@ async function cacheBuiltinFirmware(cache) {
     for (const f of (list.cloud_firmware || [])) want.push({ dir: "cloud_firmware/", f });
     const wanted = new Set();
 
+    /* Has the firmware CHANGED, not just its size?
+     *
+     * Comparing sizes was not enough and hid a nasty one: two builds of the
+     * same firmware are very often byte-for-byte the same LENGTH - system
+     * firmware 1.0.15 and 1.0.16 are both 121,036 bytes - so a replaced
+     * binary looked unchanged and the device kept serving the old one for
+     * ever, under the new name. The app then refused to install it, because
+     * the delivery receipt no longer matched what it had been handed.
+     *
+     * The receipt is the authority: it carries a SHA-256 for every file, so
+     * its content changes whenever any binary does. If it differs from the
+     * copy on this device, everything stored here is stale - throw it away
+     * and fetch the set again. */
+    const recUrl = new URL("firmware_receipt.json", self.registration.scope).href;
+    let receiptChanged = false;
+    let complete = true;          // did every listed file end up on the device?
+    try {
+      const fresh = await fetch(recUrl, { cache: "no-store" });
+      if (fresh.ok) {
+        const freshText = await fresh.clone().text();
+        const held = await cache.match(recUrl);
+        const heldText = held ? await held.text() : null;
+        receiptChanged = (heldText !== freshText);
+        if (receiptChanged) {
+          for (const req of await cache.keys()) {
+            if (/\/(main_firmware|cloud_firmware)\//.test(req.url)) await cache.delete(req);
+          }
+        }
+      }
+    } catch (e) { /* no receipt in this app - the size check below still applies */ }
+
     for (const w of want) {
       const url = new URL(w.dir + w.f.name, self.registration.scope).href;
       wanted.add(url);
@@ -64,7 +95,8 @@ async function cacheBuiltinFirmware(cache) {
       try {
         const r = await fetch(url, { cache: "reload" });
         if (r.ok) await cache.put(url, r.clone());
-      } catch (e) { /* offline: keep whatever is already stored */ }
+        else complete = false;
+      } catch (e) { complete = false; /* offline: keep whatever is stored */ }
     }
 
     /* Firmware that is no longer part of the app must not linger on the phone,
@@ -74,8 +106,12 @@ async function cacheBuiltinFirmware(cache) {
       if (!wanted.has(req.url)) await cache.delete(req);
     }
 
+    /* Store the receipt ONLY once the firmware it describes is really here.
+     * Saving it after a failed download would say "this device holds that
+     * set" when it does not, and the next start would compare equal and never
+     * try again - the stale-copy trap, one level up. */
     const meta = ["builtin.json"];
-    if (list.receipt !== false) meta.push("firmware_receipt.json");
+    if (list.receipt !== false && complete) meta.push("firmware_receipt.json");
     await Promise.all(meta.map(async u => {
       const url = new URL(u, self.registration.scope).href;
       try {
