@@ -1,7 +1,7 @@
 {
     "company":  "Danway",
     "board":  "rev5",
-    "built":  "2026-08-24 04:36",
+    "built":  "2026-08-24 04:37",
     "files":  {
                   "main_firmware/controller_24_08_26_Danway_rev5.bin":  "37bebfacd149725dbaea6fe24af16d6455f29740189d9acc70fdeb627d21a6a5",
                   "main_firmware/system_24_08_26_Danway_rev5.bin":  "8548540139623b8825ffe2e500b483e3d1dbeaab2567e815d8dd29f7682fa71f"
