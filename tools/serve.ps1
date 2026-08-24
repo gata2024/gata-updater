@@ -30,21 +30,38 @@ $fwCfg = Join-Path $PSScriptRoot 'firmware_source.json'
 $fwExample = Join-Path $PSScriptRoot 'firmware_source.example.json'
 if (-not (Test-Path $fwCfg) -and (Test-Path $fwExample)) { Copy-Item $fwExample $fwCfg }
 
-$listener = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), $port
-try {
-    $listener.Start()
-} catch {
+# Serve THIS folder or nothing. Opening the browser at a busy port - which is
+# what this used to do - hands the person whatever app already answers there:
+# start a Danway folder next to a development copy and you get the General app,
+# with its licence and its firmware channel, looking entirely normal. Walk to a
+# free port instead, and open the one we actually bound.
+$listener = $null
+$first = $port
+foreach ($try in 0..19) {
+    $candidate = $first + $try
+    $l = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), $candidate
+    try { $l.Start(); $listener = $l; $port = $candidate; break }
+    catch { try { $l.Stop() } catch { } }
+}
+if (-not $listener) {
     Write-Host ""
-    Write-Host "ERROR: port $port is already in use." -ForegroundColor Red
-    Write-Host "Maybe the updater is already running - check your browser: $prefix"
-    Start-Process $prefix
+    Write-Host "ERROR: no free port between $first and $($first + 19)." -ForegroundColor Red
+    Write-Host "Close the other updater windows and start this one again."
     Read-Host "Press ENTER to close"
     exit 1
 }
+$prefix = "http://127.0.0.1:$port/"
+
+# Name the company this folder belongs to, so a mix-up shows before any flashing.
+$chan = ""
+try {
+    $cfgTxt = Get-Content (Join-Path $root "js\config.js") -Raw
+    if ($cfgTxt -match 'channel:\s*"([^"]*)"') { $chan = "  [" + $Matches[1] + "]" }
+} catch { }
 
 Write-Host ""
 Write-Host "==============================================================" -ForegroundColor Cyan
-Write-Host "  GATA Firmware Updater - local server running" -ForegroundColor Cyan
+Write-Host "  GATA Firmware Updater - local server running$chan" -ForegroundColor Cyan
 Write-Host "  Open:  $prefix" -ForegroundColor Yellow
 Write-Host "  Keep this window open while using the updater." -ForegroundColor Cyan
 Write-Host "  Press Ctrl+C to stop." -ForegroundColor Cyan

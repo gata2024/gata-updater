@@ -340,6 +340,28 @@ const T = {
         /resetSteps\("erase"\)/.test(asrc5) && /erase: \["download", "system", "esp", "wipe"\]/.test(asrc5));
     }
 
+    /* ---------- a folder serves ITSELF, never another company's app ------ */
+    {
+      /* Both launchers used to give up when their port was taken and open the
+         browser at it anyway - so a Danway folder started next to any other
+         copy showed THAT copy: General's licence, General's firmware channel,
+         and a completely normal-looking screen. Each folder must bind a port
+         of its own, and open only the port it actually bound. */
+      const ps = await (await fetch("../tools/serve.ps1", { cache: "no-store" })).text();
+      const cs = await (await fetch("../tools/GataUpdater.cs", { cache: "no-store" })).text();
+      this.check("port: neither launcher opens the browser at a port it did not bind",
+        !/already running - opening it in the browser/.test(cs) &&
+        !/Maybe the updater is already running/.test(ps));
+      this.check("port: both launchers walk to a free port",
+        /for \(int i = 0; i < 20 && listener == null; i\+\+\)/.test(cs) &&
+        /foreach \(\$try in 0\.\.19\)/.test(ps));
+      this.check("port: the address opened is the port that was bound",
+        /\$prefix = "http:\/\/127\.0\.0\.1:\$port\/"[\s\S]{0,900}Start-Process \$prefix/.test(ps) &&
+        /Port = first \+ i/.test(cs));
+      this.check("port: the window names the company folder it is serving",
+        /local server running\$chan/.test(ps) && /is running" \+ Channel\(\)/.test(cs));
+    }
+
     /* -------- the run ENDS when the software is written, not 40 s later */
     {
       const fsrc7 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();

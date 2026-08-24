@@ -57,22 +57,41 @@ static class GataUpdater
         string example = Path.Combine(Root, @"tools\firmware_source.example.json");
         try { if (!File.Exists(cfg) && File.Exists(example)) File.Copy(example, cfg); } catch { }
 
-        TcpListener listener;
-        try
+        /* Find a port THIS folder can own.
+         *
+         * This used to say "the updater is already running" and open the
+         * browser at the busy port - handing the person whatever app was
+         * answering there. On a PC with two customer folders (Danway and KSP),
+         * or a folder started next to a development copy, the second one
+         * silently showed the FIRST one's app: wrong company, wrong licence,
+         * wrong firmware channel, and nothing on screen to say so. It cost a
+         * real "why does the Danway folder say General?".
+         *
+         * A folder must serve ITSELF or not start at all. */
+        TcpListener listener = null;
+        int first = Port;
+        for (int i = 0; i < 20 && listener == null; i++)
         {
-            listener = new TcpListener(IPAddress.Loopback, Port);
-            listener.Start();
+            try
+            {
+                TcpListener l = new TcpListener(IPAddress.Loopback, first + i);
+                l.Start();
+                listener = l;
+                Port = first + i;
+            }
+            catch (SocketException) { }
         }
-        catch (SocketException)
+        if (listener == null)
         {
-            Console.WriteLine("The updater is already running - opening it in the browser.");
-            OpenBrowser();
-            Thread.Sleep(1500);
-            return 0;
+            Console.WriteLine("No free port between " + first + " and " + (first + 19) + ".");
+            Console.WriteLine("Close the other updater windows and start this one again.");
+            Console.Write("Press ENTER to close");
+            Console.ReadLine();
+            return 1;
         }
 
         Console.WriteLine("==============================================================");
-        Console.WriteLine("  GATA Updater is running");
+        Console.WriteLine("  GATA Updater is running" + Channel());
         Console.WriteLine("  Open:  http://127.0.0.1:" + Port + "/");
         Console.WriteLine("  Keep this window open while updating. Close it when finished.");
         Console.WriteLine("==============================================================");
@@ -85,6 +104,22 @@ static class GataUpdater
             // firmware download must never block the page from loading.
             ThreadPool.QueueUserWorkItem(delegate { Serve(client); });
         }
+    }
+
+    /* Which company's app is in this folder - so the window itself says it, and
+     * a folder started from the wrong place is obvious before anything is
+     * flashed. Empty when it cannot be read: a banner is not worth failing on. */
+    static string Channel()
+    {
+        try
+        {
+            string cfg = File.ReadAllText(Path.Combine(Root, @"js\config.js"));
+            Match m = Regex.Match(cfg, "channel:\\s*\"([^\"]*)\"");
+            if (m.Success && m.Groups[1].Value.Length > 0)
+                return "  [" + m.Groups[1].Value + "]";
+        }
+        catch { }
+        return "";
     }
 
     static void OpenBrowser()
