@@ -72,49 +72,6 @@ const Flows = {
     try { await Promise.race([t.close(), Util.sleep(2000)]); } catch (e) { /* ignore */ }
   },
 
-  /* After JUMP: poll the authorized port until the APPLICATION's HMI stream
-   * ("value*?identifier*?...") appears - the proof the controller restarted
-   * and runs the new software. Returns true/false, never throws. */
-  async _waitForApp(ctx, timeoutMs) {
-    const deadline = Date.now() + timeoutMs;
-    await Util.sleep(3000);
-    while (Date.now() < deadline) {
-      if (this.cancelRequested) return false;
-      let t = null;
-      try {
-        // JUMP's reset re-samples the BOOT pin: with the switch high the
-        // board lands in ROM DFU instead of the app - jump past it again.
-        if (!ctx.demo) await this._kickPastBootSwitch(ctx);
-        t = await Transport.reconnect();
-        if (t) {
-          // open() can block INDEFINITELY on a port that never dropped
-          // (e.g. an old resident bootloader that ignored JUMP) - never let
-          // it pin this loop past the deadline.
-          const opened = await Promise.race([
-            t.open().then(() => true, () => false),
-            Util.sleep(4000).then(() => false),
-          ]);
-          if (opened) {
-            const probe = new GataBootloader(t);
-            await Util.sleep(1300);
-            const running = probe._buf.includes("*?");
-            await this._safeClose(t);
-            if (running) {
-              Util.ok("Controller restarted - the new software is RUNNING.");
-              return true;
-            }
-          } else {
-            await this._safeClose(t);
-          }
-        }
-      } catch (e) {
-        if (t) await this._safeClose(t);
-      }
-      await Util.sleep(1500);
-    }
-    return false;
-  },
-
   /* A chip erase says NOTHING until it is finished - the controller is busy
    * with the flash and cannot report a percentage. All that is really known is
    * how long it has been going, so the bar is an ESTIMATE against how long
@@ -569,8 +526,6 @@ const Flows = {
         step("esp", "done", I18N.t("d.espDone"), 1);
         try { await bl.t.close(); } catch (e) { /* controller resets itself */ }
 
-        const secs = Math.round((Date.now() - t0) / 1000);
-        step("finish", "done", I18N.t("d.finishCloud", { t: secs }), 1);
         Util.ok("CLOUD MODULE UPDATE COMPLETE.");
         ok = true;
         return true;
@@ -721,32 +676,17 @@ const Flows = {
       await bl.verify();
       step("app", "done", I18N.t("d.appDone"), 1);
 
-      /* Finish: restart, then WATCH the port until the application is
-       * actually running. After JUMP the resident bootloader revalidates for
-       * ~15 s (BKP30 was cleared to open the update window), the port goes
-       * silent, then re-enumerates with the app streaming HMI frames - that
-       * stream is the proof the controller is back up. */
-      const secs = Math.round((Date.now() - t0) / 1000);
-      if (ctx.autoJump !== false) {
-        step("finish", "active", I18N.t("d.restarting"), null);
-        await bl.jump();
-        await this._safeClose(bl.t);
-        let running = false;
-        if (!ctx.demo) {
-          step("finish", "active", I18N.t("d.restartWait"), null);
-          running = await this._waitForApp(ctx, 40000);
-        }
-        const warn = ctx._bootSwitchHigh ? " " + I18N.t("d.bootHigh") : "";
-        if (running) {
-          step("finish", ctx._bootSwitchHigh ? "warn" : "done",
-            I18N.t("d.finishRunning", { t: secs }) + warn, 1);
-        } else {
-          step("finish", "done", I18N.t("d.finishAuto", { t: secs }) + warn, 1);
-        }
-      } else {
-        await this._safeClose(bl.t);
-        step("finish", "done", I18N.t("d.finishManual"), 1);
-      }
+      /* The work is finished here: the software is written and VERIFIED. Tell
+       * the controller to start and stop.
+       *
+       * There used to be a "finish" stage that sent the restart and then
+       * watched the port for up to 40 seconds, waiting for the application's
+       * HMI stream to prove it had come back. It proved nothing worth having:
+       * the install was already verified, and the person was left staring at a
+       * progress row doing nothing long after the update was done. The LED on
+       * the board says the same thing, immediately. */
+      if (ctx.autoJump !== false) await bl.jump();
+      await this._safeClose(bl.t);
       Util.ok("UPDATE COMPLETE.");
       ok = true;
       return true;

@@ -67,8 +67,7 @@ const I18N = {
       "err.noEsp": "No ESP32 (cloud) module was detected on this board.",
       "hint.noEsp": "This looks like the board version without the cloud module. The controller restarts with its existing software by itself (press RESET once if it does not).",
       "err.noEspFiles": "This firmware version contains no ESP32 (cloud) files.",
-      "d.finishCloud": "Cloud module updated in {t} s. The controller now restarts by itself and returns to its existing software after ~15 seconds (green status LED; older firmware: sky-blue). Press RESET once if it does not.",
-      "res.cloudOk.text": "The ESP32 cloud firmware is installed. The controller restarts by itself and returns to its existing software after ~15 seconds — check for the green status LED (older firmware: sky-blue); press RESET once if it does not appear.",
+      "res.cloudOk.text": "The cloud module is updated. If the LED on the board does not light up, press RESET once.",
 
       "adv.title": "Advanced",
       "adv.eraseApp": "Erase the controller software…",
@@ -128,7 +127,6 @@ const I18N = {
       "d.wipeOld": "Skipped: the installed system firmware is older than 1.0.10 and cannot prepare the memory. Use a BOOT-mode full install to get the new system firmware first.",
       "st.esp": "ESP32 module",
       "st.app": "Controller software",
-      "st.finish": "Finish",
 
       "plat.ios": "<b>iPhone / iPad cannot flash over USB.</b> Apple does not allow browsers or apps to talk to USB serial devices (MFi-only). You can browse the firmware versions here, but to update the controller please use an <b>Android phone with a USB-OTG cable</b> or a <b>computer with Chrome/Edge</b>.",
       "plat.noUsb": "<b>This browser cannot access USB.</b> Please open this page in <b>Chrome</b> or <b>Edge</b>.",
@@ -169,12 +167,7 @@ const I18N = {
       "d.appInstalling": "Installing controller software ({s})…",
       "d.appProg": "Installing controller software… {p}%",
       "d.appDone": "Controller software installed and verified.",
-      "d.restarting": "Restarting the controller…",
       "d.bootHigh": "IMPORTANT: the BOOT switch is still in the update position — put it back to normal, or the controller will not start after the next power-off.",
-      "d.restartWait": "Controller is restarting — waiting for the new software to start (~15 s)…",
-      "d.finishRunning": "Update complete in {t} s — the controller restarted and the NEW SOFTWARE IS RUNNING. Check the status LED.",
-      "d.finishAuto": "Update complete in {t} s. The controller now reboots, checks the new software for ~15 seconds and starts it. Wait for the GREEN status LED (older firmware: sky-blue); if it does not appear, press RESET once.",
-      "d.finishManual": "Update complete. Press RESET on the controller to start the new software.",
 
       "gate.dfu.btn": "Connect to the controller (BOOT mode)",
       "gate.dfu.text": "Put the controller in update mode first: hold BOOT, press+release RESET, release BOOT. Then press the button and pick the GATA controller from the list.",
@@ -211,7 +204,7 @@ const I18N = {
       "d.sysCmd": "Not needed — the controller entered update mode by itself.",
 
       "res.ok.title": "Update complete ✔",
-      "res.ok.text": "Wait for the controller to restart (about 15 seconds), then check for the green status LED (older firmware: sky-blue). If it does not light up, press RESET once.",
+      "res.ok.text": "If the LED on the board does not light up, press RESET once.",
       "res.fail.title": "Update failed",
       "res.action.ok": "Done ✔",
       "res.action.text": "The selected action finished successfully.",
@@ -303,8 +296,7 @@ const I18N = {
       "err.noEsp": "لم يتم اكتشاف وحدة ESP32 (السحابة) على هذه اللوحة.",
       "hint.noEsp": "يبدو أن هذه نسخة اللوحة بدون وحدة السحابة. ستُعيد وحدة التحكم التشغيل بنفسها وتعود إلى برنامجها الحالي (اضغط RESET مرة إن لم يحدث).",
       "err.noEspFiles": "هذا الإصدار لا يحتوي على ملفات ESP32 (السحابة).",
-      "d.finishCloud": "تم تحديث وحدة السحابة خلال {t} ثانية. ستُعيد وحدة التحكم التشغيل بنفسها وتعود إلى برنامجها الحالي بعد ~15 ثانية (المؤشر الأخضر؛ الإصدارات الأقدم: أزرق سماوي). اضغط RESET مرة واحدة إن لم يحدث.",
-      "res.cloudOk.text": "تم تثبيت برنامج ESP32 السحابي. ستُعيد وحدة التحكم التشغيل بنفسها وتعود إلى برنامجها الحالي بعد ~15 ثانية — تحقق من المؤشر الأخضر (الإصدارات الأقدم: أزرق سماوي)؛ اضغط RESET مرة واحدة إن لم يظهر.",
+      "res.cloudOk.text": "تم تحديث وحدة الاتصال السحابي. إن لم يضئ مؤشر اللوحة، اضغط RESET مرة واحدة.",
 
       "adv.title": "خيارات متقدمة",
       "adv.eraseApp": "مسح برنامج وحدة التحكم…",
@@ -364,7 +356,6 @@ const I18N = {
       "d.wipeOld": "تم التخطي: برنامج النظام المثبّت أقدم من 1.0.10 ولا يمكنه تهيئة الذاكرة. استخدم تثبيتًا كاملًا بوضع BOOT للحصول على برنامج النظام الجديد أولًا.",
       "st.esp": "وحدة ESP32",
       "st.app": "برنامج وحدة التحكم",
-      "st.finish": "الإنهاء",
 
       "plat.ios": "<b>لا يمكن التحديث عبر USB من iPhone / iPad.</b> لا تسمح Apple للمتصفحات أو التطبيقات بالاتصال بأجهزة USB التسلسلية. يمكنك تصفّح الإصدارات هنا، ولكن لتحديث وحدة التحكم استخدم <b>هاتف Android مع كابل USB-OTG</b> أو <b>كمبيوتر مع Chrome/Edge</b>.",
       "plat.noUsb": "<b>هذا المتصفح لا يستطيع الوصول إلى USB.</b> افتح هذه الصفحة في <b>Chrome</b> أو <b>Edge</b>.",
@@ -405,12 +396,7 @@ const I18N = {
       "d.appInstalling": "جارٍ تثبيت برنامج وحدة التحكم ({s})…",
       "d.appProg": "جارٍ تثبيت برنامج وحدة التحكم… {p}%",
       "d.appDone": "تم تثبيت برنامج وحدة التحكم والتحقق منه.",
-      "d.restarting": "جارٍ إعادة تشغيل وحدة التحكم…",
       "d.bootHigh": "هام: ما يزال مفتاح BOOT في وضع التحديث — أعده إلى وضعه الطبيعي وإلا فلن تعمل وحدة التحكم بعد فصل الطاقة القادم.",
-      "d.restartWait": "وحدة التحكم تُعيد التشغيل — بانتظار بدء البرنامج الجديد (~15 ثانية)…",
-      "d.finishRunning": "اكتمل التحديث خلال {t} ثانية — أعادت وحدة التحكم التشغيل والبرنامج الجديد يعمل الآن. تحقق من مؤشر الحالة.",
-      "d.finishAuto": "اكتمل التحديث خلال {t} ثانية. ستُعيد وحدة التحكم التشغيل الآن وتفحص البرنامج الجديد لمدة ~15 ثانية ثم تبدأه. انتظر المؤشر الضوئي الأخضر (الإصدارات الأقدم: أزرق سماوي)؛ إن لم يظهر اضغط RESET مرة واحدة.",
-      "d.finishManual": "اكتمل التحديث. اضغط RESET على وحدة التحكم لبدء البرنامج الجديد.",
 
       "gate.dfu.btn": "الاتصال بوحدة التحكم (وضع BOOT)",
       "gate.dfu.text": "ضع وحدة التحكم في وضع التحديث أولاً: اضغط باستمرار على BOOT، اضغط وحرّر RESET، ثم حرّر BOOT. ثم اضغط الزر واختر وحدة تحكم GATA من القائمة.",
@@ -447,7 +433,7 @@ const I18N = {
       "d.sysCmd": "غير مطلوب — دخلت وحدة التحكم وضع التحديث بنفسها.",
 
       "res.ok.title": "اكتمل التحديث ✔",
-      "res.ok.text": "انتظر إعادة تشغيل وحدة التحكم (حوالي 15 ثانية)، ثم تحقق من المؤشر الضوئي الأخضر (الإصدارات الأقدم: أزرق سماوي). إن لم يضئ اضغط RESET مرة واحدة.",
+      "res.ok.text": "إن لم يضئ مؤشر اللوحة، اضغط RESET مرة واحدة.",
       "res.fail.title": "فشل التحديث",
       "res.action.ok": "تم ✔",
       "res.action.text": "اكتمل الإجراء المحدد بنجاح.",
@@ -539,8 +525,7 @@ const I18N = {
       "err.noEsp": "Bu kartta ESP32 (bulut) modülü algılanmadı.",
       "hint.noEsp": "Bu, bulut modülü olmayan kart sürümüne benziyor. Kontrol ünitesi kendiliğinden yeniden başlar ve mevcut yazılımına döner (dönmezse bir kez RESET'e basın).",
       "err.noEspFiles": "Bu sürümde ESP32 (bulut) dosyaları yok.",
-      "d.finishCloud": "Bulut modülü {t} sn'de güncellendi. Kontrol ünitesi kendiliğinden yeniden başlar ve ~15 saniye sonra mevcut yazılımına döner (yeşil durum LED'i; eski sürümlerde gök mavisi). Dönmezse bir kez RESET'e basın.",
-      "res.cloudOk.text": "ESP32 bulut yazılımı yüklendi. Kontrol ünitesi kendiliğinden yeniden başlar ve ~15 saniye içinde mevcut yazılımına döner — yeşil durum LED'ini kontrol edin (eski sürümlerde gök mavisi); görünmezse bir kez RESET'e basın.",
+      "res.cloudOk.text": "Bulut modülü güncellendi. Karttaki LED yanmazsa bir kez RESET’e basın.",
 
       "adv.title": "Gelişmiş",
       "adv.eraseApp": "Kontrol ünitesi yazılımını sil…",
@@ -600,7 +585,6 @@ const I18N = {
       "d.wipeOld": "Atlandı: yüklü sistem yazılımı 1.0.10'dan eski ve belleği hazırlayamıyor. Önce BOOT modunda tam kurulum yaparak yeni sistem yazılımını yükleyin.",
       "st.esp": "ESP32 modülü",
       "st.app": "Kontrol ünitesi yazılımı",
-      "st.finish": "Bitir",
 
       "plat.ios": "<b>iPhone / iPad USB üzerinden yazılım yükleyemez.</b> Apple, tarayıcıların veya uygulamaların USB seri cihazlarla konuşmasına izin vermez. Sürümlere buradan göz atabilirsiniz, ancak güncelleme için <b>USB-OTG kablolu bir Android telefon</b> veya <b>Chrome/Edge yüklü bir bilgisayar</b> kullanın.",
       "plat.noUsb": "<b>Bu tarayıcı USB'ye erişemiyor.</b> Lütfen bu sayfayı <b>Chrome</b> veya <b>Edge</b> ile açın.",
@@ -641,12 +625,7 @@ const I18N = {
       "d.appInstalling": "Kontrol ünitesi yazılımı yükleniyor ({s})…",
       "d.appProg": "Kontrol ünitesi yazılımı yükleniyor… %{p}",
       "d.appDone": "Kontrol ünitesi yazılımı yüklendi ve doğrulandı.",
-      "d.restarting": "Kontrol ünitesi yeniden başlatılıyor…",
       "d.bootHigh": "ÖNEMLİ: BOOT anahtarı hâlâ güncelleme konumunda — normale geri alın, yoksa bir sonraki güç kesintisinden sonra kontrol ünitesi başlamaz.",
-      "d.restartWait": "Kontrol ünitesi yeniden başlıyor — yeni yazılımın başlaması bekleniyor (~15 sn)…",
-      "d.finishRunning": "Güncelleme {t} sn'de tamamlandı — kontrol ünitesi yeniden başladı ve YENİ YAZILIM ÇALIŞIYOR. Durum LED'ini kontrol edin.",
-      "d.finishAuto": "Güncelleme {t} sn'de tamamlandı. Kontrol ünitesi şimdi yeniden başlar, yeni yazılımı ~15 saniye denetler ve çalıştırır. YEŞİL durum LED'ini bekleyin (eski sürümlerde gök mavisi); görünmezse bir kez RESET'e basın.",
-      "d.finishManual": "Güncelleme tamamlandı. Yeni yazılımı başlatmak için kontrol ünitesinde RESET'e basın.",
 
       "gate.dfu.btn": "Kontrol ünitesine bağlan (BOOT modu)",
       "gate.dfu.text": "Önce kontrol ünitesini güncelleme moduna alın: BOOT'u basılı tutun, RESET'e basıp bırakın, BOOT'u bırakın. Sonra düğmeye basın ve listeden GATA kontrol ünitesini seçin.",
@@ -683,7 +662,7 @@ const I18N = {
       "d.sysCmd": "Gerekmedi — kontrol ünitesi güncelleme moduna kendisi girdi.",
 
       "res.ok.title": "Güncelleme tamamlandı ✔",
-      "res.ok.text": "Kontrol ünitesinin yeniden başlamasını bekleyin (yaklaşık 15 saniye), sonra yeşil durum LED'ini kontrol edin (eski sürümlerde gök mavisi). Yanmazsa bir kez RESET'e basın.",
+      "res.ok.text": "Karttaki LED yanmazsa bir kez RESET’e basın.",
       "res.fail.title": "Güncelleme başarısız",
       "res.action.ok": "Tamam ✔",
       "res.action.text": "Seçilen işlem başarıyla tamamlandı.",

@@ -337,7 +337,33 @@ const T = {
         /step\("app", "done"[\s\S]{0,40}1\)/.test(eraseFn));
       const asrc5 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
       this.check("erase: the button shows the step rows instead of a still screen",
-        /resetSteps\("erase"\)/.test(asrc5) && /erase: \["download", "system", "esp", "wipe", "finish"\]/.test(asrc5));
+        /resetSteps\("erase"\)/.test(asrc5) && /erase: \["download", "system", "esp", "wipe"\]/.test(asrc5));
+    }
+
+    /* -------- the run ENDS when the software is written, not 40 s later */
+    {
+      const fsrc7 = await (await fetch("../js/flows.js", { cache: "no-store" })).text();
+      const asrc7 = await (await fetch("../js/app.js", { cache: "no-store" })).text();
+      const i18n7 = await (await fetch("../js/i18n.js", { cache: "no-store" })).text();
+      const htm7 = await (await fetch("../index.html", { cache: "no-store" })).text();
+      /* The old "finish" stage sent the restart and then watched the port for
+         up to 40 s to see the application come back. The install is already
+         verified by then, so all it added was a progress row sitting still
+         long after the update was done. */
+      this.check("finish: nothing polls the port after the restart is sent",
+        !/_waitForApp/.test(fsrc7));
+      this.check("finish: the finish row is gone from the screen",
+        !/data-step="finish"/.test(htm7) && !/step\("finish"/.test(fsrc7));
+      this.check("finish: the restart is still sent, and still honours the auto-restart choice",
+        /if \(ctx\.autoJump !== false\) await bl\.jump\(\)/.test(fsrc7));
+      /* Short and actionable: done, and what to do if the board stays dark. */
+      const okText = (i18n7.match(/"res\.ok\.text": "([^"]*)"/) || [])[1] || "";
+      this.check("finish: the done message is one short line about the LED",
+        okText.length < 90 && /RESET/.test(okText) && !/15 seconds/.test(okText));
+      /* A BOOT switch left up leaves a board that will not start after the
+         next power-off - that warning outlived the row that used to carry it. */
+      this.check("finish: a BOOT switch left in the update position is still reported",
+        /_bootSwitchHigh \? " " \+ I18N\.t\("d\.bootHigh"\)/.test(asrc7));
     }
 
     /* ---------------- the connect choice comes FIRST, before the download */

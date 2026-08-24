@@ -488,7 +488,7 @@ const App = {
       both: [],
       /* Erasing installs nothing - the only rows that mean anything are
        * reaching the controller and the erase itself. */
-      erase: ["download", "system", "esp", "wipe", "finish"],
+      erase: ["download", "system", "esp", "wipe"],
     }[mode || "both"] || [];
     // The memory-preparation row only exists on a first installation.
     const chk = this.$("chkFirstInstall");
@@ -866,7 +866,7 @@ const App = {
 
       const { pkg, version } = await this.getPackage(mode);
 
-      await Flows.runFullUpdate({
+      const ctx = {
         mode, pkg, version,
         preConnected: picked && picked.serial ? picked.serial : null,
         preDfu: picked && picked.dfu ? picked.dfu : null,
@@ -884,9 +884,16 @@ const App = {
           userGate: (t, x, a, alt, poll) => this.userGate(t, x, a, alt, poll),
         },
         onDeviceLine: line => Util.dev("< " + line),
-      });
-        this.showResult(true, I18N.t("res.ok.title"),
-        I18N.t(mode === "cloud" ? "res.cloudOk.text" : "res.ok.text"));
+      };
+      await Flows.runFullUpdate(ctx);
+
+      /* Say "done" and nothing else - the install was verified, so there is
+       * nothing left to watch for. The ONE exception is a BOOT switch left in
+       * the update position: the board would not start after the next
+       * power-off, and only this screen can still say so. */
+      const warn = ctx._bootSwitchHigh ? " " + I18N.t("d.bootHigh") : "";
+      this.showResult(true, I18N.t("res.ok.title"),
+        I18N.t(mode === "cloud" ? "res.cloudOk.text" : "res.ok.text") + warn);
     } catch (e) {
       Util.err(e.message + (e.hint ? " — " + e.hint : ""));
       this.markActiveStepFailed();
@@ -895,7 +902,7 @@ const App = {
       this.$("gateBox").classList.add("hidden");
       this.setBusy(false);
       this.renderHistory();
-      }
+    }
   },
 
   markActiveStepFailed() {
