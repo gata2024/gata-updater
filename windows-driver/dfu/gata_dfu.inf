@@ -1,0 +1,42 @@
+; GATA controller in update mode (STM32 ROM DFU) -> Windows' own WinUSB.
+; Installs nothing of its own: it only points the device at winusb.sys, the
+; Microsoft-signed driver already present in Windows.
+[Strings]
+VendorName = "GATA"
+DeviceName = "GATA controller (update mode)"
+DeviceID   = "VID_0483&PID_DF11"
+DeviceGUID = "{b35924d6-3e16-4a9e-9782-5524a4b79bac}"
+
+[Version]
+DriverVer = 01/01/2026,1.0.0.0
+CatalogFile = gata_dfu.cat
+Signature = "$Windows NT$"
+Class     = USBDevice
+ClassGuid = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider  = %VendorName%
+
+[Manufacturer]
+%VendorName% = GataDevice_WinUSB,NTx86,NTamd64,NTarm64
+
+[GataDevice_WinUSB.NTx86]
+%DeviceName% = USB_Install, USB\%DeviceID%
+
+[GataDevice_WinUSB.NTamd64]
+%DeviceName% = USB_Install, USB\%DeviceID%
+
+[GataDevice_WinUSB.NTarm64]
+%DeviceName% = USB_Install, USB\%DeviceID%
+
+[USB_Install]
+Include = winusb.inf
+Needs   = WINUSB.NT
+
+[USB_Install.Services]
+Include = winusb.inf
+Needs   = WINUSB.NT.Services
+
+[USB_Install.HW]
+AddReg = AddDeviceInterfaceGUID
+
+[AddDeviceInterfaceGUID]
+HKR,,DeviceInterfaceGUIDs,0x10000,%DeviceGUID%

@@ -1,0 +1,9 @@
+{
+    "note":  "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.",
+    "main_firmware":  [
+
+                      ],
+    "cloud_firmware":  [
+
+                       ]
+}
