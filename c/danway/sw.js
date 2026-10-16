@@ -13,6 +13,14 @@
  */
 importScripts("js/config.js");
 
+/* The app version, stamped here by tools\deploy_app.ps1 on every publish.
+ * It is NOT read anywhere - it exists so that sw.js itself CHANGES with each
+ * version. A phone always fetches sw.js fresh when it checks for an update,
+ * but js/config.js (where the version really lives) may come from its HTTP
+ * cache - GitHub Pages allows 10 minutes - so with a byte-identical sw.js a
+ * new release could go unnoticed for that long. */
+const SW_STAMP = "2.32.2";
+
 /* Cache storage is per-ORIGIN, and every company's app shares this origin
  * (/gata-updater/ and /gata-updater/c/<id>/). The channel has to be part of
  * the name: without it, activating one company's app deleted every cache that

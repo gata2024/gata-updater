@@ -44,8 +44,16 @@ const App = {
       // Auto-refresh on deploys: when a new service worker (new APP_CONFIG
       // version) activates, reload so the tab can never keep running old code
       // - unless an update is in progress; then reload after it finishes.
-      navigator.serviceWorker.register("sw.js").then(reg => {
+      /* updateViaCache "none": check sw.js AND js/config.js against the server
+       * every time, never against the browser's HTTP cache (GitHub Pages lets
+       * it keep files 10 minutes, which delayed every release). */
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
         reg.update().catch(() => {});
+        /* An app that was only in the background never restarts, so it never
+         * re-checked: look again each time it comes back to the front. */
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") reg.update().catch(() => {});
+        });
         /* Ask the worker to re-check the firmware stored on this device.
          * Without this, replacing the firmware inside the app reached nobody:
          * the binaries are cached at install, and a deploy that only changes
