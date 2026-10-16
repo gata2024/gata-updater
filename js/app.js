@@ -15,6 +15,7 @@ const App = {
     I18N.applyStatic();
     this.wireEvents();
     this.renderBoardButtons();
+    this.loadBoards();          // names + notes from the Release Manager; re-renders when read
     this.renderCaps();
     this.renderHistory();
     this.applySettingsToUi();
@@ -241,6 +242,7 @@ const App = {
     list.appendChild(loading);
     try {
       this.manifest = await Cloud.fetchManifest();
+      this.renderBoardButtons();   // the board list shows only boards with software
       this.renderVersions();
     } catch (e) {
       this.manifest = null;
@@ -258,18 +260,87 @@ const App = {
   },
 
   /* Which board revision the user is updating (persisted per device). */
-  board() { return store.getItem("gata.board") === "rev6" ? "rev6" : "rev5"; },
+  board() {
+    const b = store.getItem("gata.board");
+    if (this.boardCatalog().some(x => x.id === b)) return b;
+    /* Nothing chosen yet on this device: start on the first board that has
+     * software, rather than on rev 5 with an empty list. */
+    if (this.manifest && Array.isArray(this.manifest.versions)) {
+      const have = new Set(this.manifest.versions.map(v => Cloud.boardOf(v)));
+      const first = this.boardCatalog().find(x => have.has(x.id));
+      if (first) return first.id;
+    }
+    return "rev5";
+  },
   setBoard(b) {
     store.setItem("gata.board", b);
     this.selectedVersion = null;               // the old pick may not exist for this board
     this.renderBoardButtons();
     this.renderVersions();
   },
+
+  /* The boards and the note under each, as the Release Manager published them
+   * (boards.json). The last copy read is kept, so the notes still show with no
+   * internet; with neither, the built-in list in cloud.js. */
+  boardCatalog() {
+    if (this._boards) return this._boards;
+    try {
+      const kept = JSON.parse(store.getItem("gata.boardsJson") || "null");
+      if (kept && Array.isArray(kept.boards) && kept.boards.length) return kept.boards;
+    } catch (_) { }
+    return Cloud.BOARDS;
+  },
+  async loadBoards() {
+    try {
+      const r = await fetch("boards.json", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || !Array.isArray(j.boards) || !j.boards.length) return;
+      this._boards = j.boards.filter(x => x && typeof x.id === "string");
+      store.setItem("gata.boardsJson", JSON.stringify({ boards: this._boards }));
+      this.renderBoardButtons();
+    } catch (_) { /* offline or not published yet - keep what we have */ }
+  },
+  boardName(info) {
+    const key = "board." + info.id;            // translated where a translation exists
+    const t = I18N.t(key);
+    return t !== key ? t : (info.name || info.id);
+  },
+  /* Only boards that have software to install: anything in the cloud list for
+   * it (an "all" release counts for every board). The current pick is always
+   * kept, so the choice is never silently changed under the user. With no
+   * list loaded yet (offline, still loading) every board is offered. */
+  shownBoards() {
+    const all = this.boardCatalog();
+    if (!this.manifest || !Array.isArray(this.manifest.versions)) return all;
+    const have = new Set(this.manifest.versions.map(v => Cloud.boardOf(v)));
+    if (have.has("all")) return all;
+    const cur = this.board();
+    return all.filter(x => have.has(x.id) || x.id === cur);
+  },
   renderBoardButtons() {
     const b = this.board();
-    this.$("btnBoard5").classList.toggle("on", b === "rev5");
-    this.$("btnBoard6").classList.toggle("on", b === "rev6");
-    this.$("boardNote6").classList.toggle("hidden", b !== "rev6");
+    const sel = this.$("boardSelect");
+    if (sel) {
+      sel.innerHTML = "";
+      for (const info of this.shownBoards()) {
+        const o = document.createElement("option");
+        o.value = info.id;
+        o.textContent = this.boardName(info);
+        sel.appendChild(o);
+      }
+      sel.value = b;
+    }
+    /* The note typed in the Release Manager for this board. Rev 6 without one
+     * keeps its translated USB-C cable tip. */
+    const info = this.boardCatalog().find(x => x.id === b) || {};
+    let note = (info.note || "").trim();
+    if (!note && b === "rev6") note = I18N.t("board.note6");
+    const p = this.$("boardNote");
+    if (p) {
+      p.textContent = note;
+      p.classList.toggle("hidden", !note);
+    }
   },
 
   renderVersions() {
@@ -947,6 +1018,7 @@ const App = {
   changeLanguage(lang) {
     I18N.setLang(lang);
     this.applySettingsToUi();
+    this.renderBoardButtons();   // option texts are built here, not by data-i18n
     this.renderCaps();
     this.renderVersions();
     this.renderHistory();
@@ -957,8 +1029,7 @@ const App = {
   wireEvents() {
     /* The one button everybody uses: newest software, everything the board
      * has. "both" already skips the ESP32 by itself when none is fitted. */
-    this.$("btnBoard5").onclick = () => this.setBoard("rev5");
-    this.$("btnBoard6").onclick = () => this.setBoard("rev6");
+    this.$("boardSelect").onchange = e => this.setBoard(e.target.value);
     this.$("btnUpdateNow").onclick = () => this.onUpdate("both");
     this.$("btnUpdCtrl").onclick = () => this.onUpdate("controller");
     this.$("btnUpdCloud").onclick = () => this.onUpdate("cloud");
