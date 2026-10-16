@@ -457,6 +457,28 @@ const Cloud = {
     });
   },
 
+  /* Board ids: "rev4" .. "rev10", plus "rev5old" = rev 5 OLDER batch. Plain
+   * "rev5" is the rev 5 SECOND batch: everything published before the two
+   * batches were told apart was for it, so those releases keep their meaning.
+   * boards.json (written by the Release Manager) adds a display name and the
+   * note shown under the board choice; this list is the fallback when it
+   * cannot be read. */
+  BOARDS: [
+    { id: "rev4",    name: "Board rev 4" },
+    { id: "rev5old", name: "Board rev 5 (older batch)" },
+    { id: "rev5",    name: "Board rev 5 (second batch)" },
+    { id: "rev6",    name: "Board rev 6" },
+    { id: "rev7",    name: "Board rev 7" },
+    { id: "rev8",    name: "Board rev 8" },
+    { id: "rev9",    name: "Board rev 9" },
+    { id: "rev10",   name: "Board rev 10" }
+  ],
+  /* The hardware revision number: both rev 5 batches are 5. The bootloader
+   * reports "rev5"/"rev6", and the rev 6 rules (ESP32 on USART3) apply to every
+   * board from rev 6 on. */
+  boardNum(b) { const m = /^rev(\d+)/.exec(b || ""); return m ? parseInt(m[1], 10) : 0; },
+  sameBoardFamily(a, b) { return this.boardNum(a) === this.boardNum(b); },
+
   /* The two controller files a version can carry. Releases published before
    * the naming was cleaned up call them "main" and "bootloaders.b1/.b3" (two
    * builds of the same system firmware that only differed by a version number,

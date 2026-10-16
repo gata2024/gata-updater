@@ -491,12 +491,15 @@ const Flows = {
        * INSTALLED on the board, not by the board alone. Older firmware on a
        * rev 6 board would talk to the microSD pads: harmless but dead, so
        * say so instead of timing out. */
-      if (bl.boardRev && bl.boardRev !== ctx.board) {
+      /* Compare the revision NUMBER: the controller cannot tell the two rev 5
+       * batches apart, so "rev5" from it matches "rev5old" picked here. */
+      if (bl.boardRev && !Cloud.sameBoardFamily(bl.boardRev, ctx.board)) {
         Util.warn("The controller reports a " + bl.boardRev + " board but '" +
                   ctx.board + "' is selected - trusting the controller.");
       }
+      /* Rev 6 and every later board carry the ESP32 on USART3. */
       const espPossible = (bl.blVersion || 0) >= 0x00010009 ||
-                          (bl.boardRev || ctx.board) !== "rev6";
+                          Cloud.boardNum(bl.boardRev || ctx.board) < 6;
 
       /* =================================================== mode: cloud ==== */
       if (mode === "cloud") {
@@ -842,7 +845,7 @@ const Flows = {
       const bl = await this._connectBootloader(ctx, { tries: 3 });
       /* Same rev 6 rule as the main flows: only system firmware 1.0.9+
        * reaches the ESP32 on a rev 6 board (USART3/PD8-PD9). */
-      if ((bl.blVersion || 0) < 0x00010009 && (bl.boardRev || ctx.board) === "rev6") {
+      if ((bl.blVersion || 0) < 0x00010009 && Cloud.boardNum(bl.boardRev || ctx.board) >= 6) {
         throw new UploaderError(I18N.t("err.espRev6"), I18N.t("hint.espRev6"));
       }
       const hasEsp = await bl.espDetect(true);

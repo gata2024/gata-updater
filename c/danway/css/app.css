@@ -336,8 +336,15 @@ details.picky[open] > summary { margin-bottom: 8px; }
 }
 .bootguide ol.prep { margin: 6px 0 4px; }
 
-/* Board revision selector (rev 5 / rev 6). */
+/* Board revision selector: a dropdown since there are more than two boards. */
 .boardrow { align-items: center; margin-bottom: 10px; }
+.boardsel {
+  border: 1.5px solid var(--line, #38507a); border-radius: 10px; padding: 8px 12px;
+  font-size: .95rem; font-weight: 600; background: var(--bg); color: var(--text);
+  max-width: 100%; cursor: pointer;
+}
+.boardsel:focus { outline: 2px solid var(--accent, #0b57d0); border-color: transparent; }
+#boardNote { white-space: pre-line; }   /* keep the line breaks typed in the Release Manager */
 .licbadge { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
   border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-weight: 700;
   font-size: 13px; letter-spacing: .2px; white-space: nowrap; }

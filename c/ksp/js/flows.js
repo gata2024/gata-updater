@@ -491,12 +491,15 @@ const Flows = {
        * INSTALLED on the board, not by the board alone. Older firmware on a
        * rev 6 board would talk to the microSD pads: harmless but dead, so
        * say so instead of timing out. */
-      if (bl.boardRev && bl.boardRev !== ctx.board) {
+      /* Compare the revision NUMBER: the controller cannot tell the two rev 5
+       * batches apart, so "rev5" from it matches "rev5old" picked here. */
+      if (bl.boardRev && !Cloud.sameBoardFamily(bl.boardRev, ctx.board)) {
         Util.warn("The controller reports a " + bl.boardRev + " board but '" +
                   ctx.board + "' is selected - trusting the controller.");
       }
+      /* Rev 6 and every later board carry the ESP32 on USART3. */
       const espPossible = (bl.blVersion || 0) >= 0x00010009 ||
-                          (bl.boardRev || ctx.board) !== "rev6";
+                          Cloud.boardNum(bl.boardRev || ctx.board) < 6;
 
       /* =================================================== mode: cloud ==== */
       if (mode === "cloud") {
@@ -589,8 +592,33 @@ const Flows = {
         step("esp", "warn", I18N.t("d.espRev6") + " " + I18N.t("hint.espRev6"), 1);
       } else if (mode === "both") {
         step("esp", "active", I18N.t("d.espCheck"), null);
-        const hasEsp = await bl.espDetect(true);
+        let hasEsp = await bl.espDetect(true);
         this._ck();
+
+        /* One unanswered check must not cost the cloud module. When ESP_DETECT
+         * gets no answer the system firmware shuts its ESP serial port down
+         * and never re-opens it in that session, so asking again on the same
+         * connection can never succeed - and this flow used to give up there
+         * and report "no ESP32", while the stand-alone cloud update (whose
+         * check is the first thing it does) found the same module fine. So:
+         * restart the controller - safe here, the old application is already
+         * erased, so it comes back in update mode - and check once more on a
+         * fresh session. A board that really has no module just costs one
+         * extra restart. */
+        if (!hasEsp && ctx.pkg.esp && !ctx.demo) {
+          Util.warn("The cloud module did not answer - restarting the controller and checking once more...");
+          try { await bl.jump(); } catch (e) { /* reply not expected */ }
+          try { await bl.t.close(); } catch (e) { /* resetting anyway */ }
+          step("connect", "active", I18N.t("d.reconWait"), null);
+          await Util.sleep(3000);
+          bl = await this._connectBootloader(ctx, { tries: 12, delay: 1200 });
+          step("connect", "done", I18N.t("d.reconnected"), 1);
+          step("esp", "active", I18N.t("d.espCheck"), null);
+          hasEsp = await bl.espDetect(false);
+          this._ck();
+          Util.info(hasEsp ? "Cloud module found on the second check."
+                           : "Cloud module still not answering - treating this board as having none.");
+        }
 
         if (hasEsp && ctx.pkg.esp) {
           let image, addr;
@@ -817,7 +845,7 @@ const Flows = {
       const bl = await this._connectBootloader(ctx, { tries: 3 });
       /* Same rev 6 rule as the main flows: only system firmware 1.0.9+
        * reaches the ESP32 on a rev 6 board (USART3/PD8-PD9). */
-      if ((bl.blVersion || 0) < 0x00010009 && (bl.boardRev || ctx.board) === "rev6") {
+      if ((bl.blVersion || 0) < 0x00010009 && Cloud.boardNum(bl.boardRev || ctx.board) >= 6) {
         throw new UploaderError(I18N.t("err.espRev6"), I18N.t("hint.espRev6"));
       }
       const hasEsp = await bl.espDetect(true);
