@@ -1,9 +1,31 @@
 {
     "note":  "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.",
     "main_firmware":  [
-
+                          {
+                              "name":  "controller_17_10_26_Danway_rev8.bin",
+                              "size":  1026788
+                          },
+                          {
+                              "name":  "system_17_10_26_Danway_rev8.bin",
+                              "size":  121036
+                          }
                       ],
     "cloud_firmware":  [
-
+                           {
+                               "name":  "boot_app0.bin",
+                               "size":  8192
+                           },
+                           {
+                               "name":  "bootloader.bin",
+                               "size":  17536
+                           },
+                           {
+                               "name":  "firmware.bin",
+                               "size":  1292128
+                           },
+                           {
+                               "name":  "partitions.bin",
+                               "size":  3072
+                           }
                        ]
 }
