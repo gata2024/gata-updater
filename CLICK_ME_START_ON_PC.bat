@@ -25,6 +25,9 @@ if errorlevel 1 (
     echo.
 )
 
+REM ---- newer app on the website? take it (skipped with no internet) ----------
+if exist "tools\update_app.ps1" powershell -NoProfile -ExecutionPolicy Bypass -File "tools\update_app.ps1"
+
 REM ---- start the updater ----------------------------------------------------
 powershell -NoProfile -ExecutionPolicy Bypass -File "tools\serve.ps1"
 pause
