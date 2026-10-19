@@ -19,7 +19,7 @@ importScripts("js/config.js");
  * but js/config.js (where the version really lives) may come from its HTTP
  * cache - GitHub Pages allows 10 minutes - so with a byte-identical sw.js a
  * new release could go unnoticed for that long. */
-const SW_STAMP = "2.32.2";
+const SW_STAMP = "2.32.3";
 
 /* Cache storage is per-ORIGIN, and every company's app shares this origin
  * (/gata-updater/ and /gata-updater/c/<id>/). The channel has to be part of

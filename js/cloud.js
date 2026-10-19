@@ -469,7 +469,9 @@ const Cloud = {
     { id: "rev5",    name: "Board rev 5 (second batch)" },
     { id: "rev6",    name: "Board rev 6" },
     { id: "rev7",    name: "Board rev 7" },
-    { id: "rev8",    name: "Board rev 8" },
+    { id: "rev8",    name: "Board rev 8 (latest)" },
+    { id: "rev8_in_the_board",         name: "Board rev 8 (in the board)" },
+    { id: "rev8_withpumpstartcommand", name: "Board rev 8 (with pump start command)" },
     { id: "rev9",    name: "Board rev 9" },
     { id: "rev10",   name: "Board rev 10" }
   ],

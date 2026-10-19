@@ -1,13 +1,55 @@
 {
   "note": "Board list + the note shown under the board choice in the updater. Written by the Release Manager (section 2, Save note) - edit it there.",
   "boards": [
-    { "id": "rev4", "name": "Board rev 4", "note": "" },
-    { "id": "rev5old", "name": "Board rev 5 (older batch)", "note": "" },
-    { "id": "rev5", "name": "Board rev 5 (second batch)", "note": "" },
-    { "id": "rev6", "name": "Board rev 6", "note": "" },
-    { "id": "rev7", "name": "Board rev 7", "note": "" },
-    { "id": "rev8", "name": "Board rev 8", "note": "" },
-    { "id": "rev9", "name": "Board rev 9", "note": "" },
-    { "id": "rev10", "name": "Board rev 10", "note": "" }
+    {
+      "id": "rev4",
+      "name": "Board rev 4",
+      "note": ""
+    },
+    {
+      "id": "rev5old",
+      "name": "Board rev 5 (older batch)",
+      "note": ""
+    },
+    {
+      "id": "rev5",
+      "name": "Board rev 5 (second batch)",
+      "note": ""
+    },
+    {
+      "id": "rev6",
+      "name": "Board rev 6",
+      "note": ""
+    },
+    {
+      "id": "rev7",
+      "name": "Board rev 7",
+      "note": ""
+    },
+    {
+      "id": "rev8",
+      "name": "Board rev 8 (latest)",
+      "note": ""
+    },
+    {
+      "id": "rev8_in_the_board",
+      "name": "Board rev 8 (in the board)",
+      "note": ""
+    },
+    {
+      "id": "rev8_withpumpstartcommand",
+      "name": "Board rev 8 (with pump start command)",
+      "note": ""
+    },
+    {
+      "id": "rev9",
+      "name": "Board rev 9",
+      "note": ""
+    },
+    {
+      "id": "rev10",
+      "name": "Board rev 10",
+      "note": ""
+    }
   ]
 }
