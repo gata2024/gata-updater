@@ -7,8 +7,6 @@
     { "id": "rev6", "name": "Board rev 6", "note": "" },
     { "id": "rev7", "name": "Board rev 7", "note": "" },
     { "id": "rev8", "name": "Board rev 8 (latest)", "note": "latest for exhibition" },
-    { "id": "rev8_in_the_board", "name": "Board rev 8 (in the board)", "note": "" },
-    { "id": "rev8_withpumpstartcommand", "name": "Board rev 8 (with pump start command)", "note": "" },
     { "id": "rev9", "name": "Board rev 9", "note": "" },
     { "id": "rev10", "name": "Board rev 10", "note": "" }
   ]
