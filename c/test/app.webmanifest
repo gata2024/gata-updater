@@ -1,6 +1,6 @@
 {
-    "id":  "gata-updater-ksp",
-    "name":  "GATA Updater - KSP",
+    "id":  "gata-updater-test",
+    "name":  "GATA Updater - Test",
     "short_name":  "GATA Update",
     "description":  "Cloud firmware update tool for the GATA controller (USB / USB-OTG).",
     "start_url":  ".",

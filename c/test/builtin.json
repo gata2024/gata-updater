@@ -2,11 +2,11 @@
     "note":  "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.",
     "main_firmware":  [
                           {
-                              "name":  "controller_20_10_26_Danway_rev8.bin",
-                              "size":  1059084
+                              "name":  "controller_23_10_26_Test_rev6.bin",
+                              "size":  1060588
                           },
                           {
-                              "name":  "system_20_10_26_Danway_rev8.bin",
+                              "name":  "system_23_10_26_Test_rev6.bin",
                               "size":  121036
                           }
                       ],
