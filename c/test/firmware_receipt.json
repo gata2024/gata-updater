@@ -1,0 +1,13 @@
+{
+    "company":  "Test",
+    "board":  "rev8",
+    "built":  "2026-10-24 21:36",
+    "files":  {
+                  "main_firmware/controller_24_10_26_Test_rev8.bin":  "81a8752766b27ec75f1e19e16a1a9c890c78987af4b40dfacb9d75586dc7c19c",
+                  "main_firmware/system_24_10_26_Test_rev8.bin":  "bcef273c26b907f58ad427d72d8f7b26de47179a91479d9dc80629df9670bac6"
+              },
+    "built_times":  {
+                        "main_firmware/controller_24_10_26_Test_rev8.bin":  "2026-10-24 21:31",
+                        "main_firmware/system_24_10_26_Test_rev8.bin":  "2026-10-15 20:42"
+                    }
+}
