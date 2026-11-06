@@ -672,7 +672,7 @@ const Flows = {
        * not running to talk on that cable meanwhile. A failure here does NOT
        * stop the controller update - the expansion's ROM bootloader cannot be
        * erased, so it can be repeated at any time with "Expansion board only". */
-      await this._expansionPhase(ctx, bl, step, false);
+      bl = (await this._expansionPhase(ctx, bl, step, false)).bl;   /* may be a new session (BOOT-mode update program) */
 
       /* Application - streamed with the ESP silenced (or absent + defused).
        * If the controller stops accepting data mid-stream, do NOT end the
@@ -841,16 +841,51 @@ const Flows = {
   },
 
   /* One expansion pass on an open bootloader session. strict = throw on any
-   * problem (stand-alone action); otherwise report it on the step and go on. */
+   * problem (stand-alone action); otherwise report it on the step and go on.
+   * Returns { ok, bl } - bl is a NEW session when the update program had to be
+   * replaced first (the caller must go on with that one). */
   async _expansionPhase(ctx, bl, step, strict) {
+    const out = (ok) => ({ ok, bl });
     if (!ctx.pkg.expansion) {
       step("exp", "done", I18N.t("d.expNotIncluded"), 1);
-      return false;
+      return out(false);
     }
     if (!bl.expSupported && !ctx.demo) {
-      if (strict) throw new UploaderError(I18N.t("err.expOld"), I18N.t("hint.expOld"));
-      step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
-      return false;
+      /* 2026-11-06: the board's update program is older than 1.0.17 and cannot
+       * program the expansion. A new update program is written ONLY in BOOT
+       * mode (DFU) - so when this version carries one that can, ask for BOOT
+       * mode once, install it, and go on in the same run, instead of failing.
+       * A version whose own update program is old too cannot help: say so. */
+      const sysCan = ctx.pkg.system && Validate._has(ctx.pkg.system, "EXP_DETECT") >= 0;
+      Util.warn("This controller's update program cannot program the expansion board (older than 1.0.17)" +
+                (sysCan ? " - installing this version's update program in BOOT mode first." :
+                          " - and this version's own update program is old too."));
+      if (!sysCan) {
+        if (strict) throw new UploaderError(I18N.t("err.expSysOld"), I18N.t("hint.expSysOld"));
+        step("exp", "warn", I18N.t("err.expSysOld") + " " + I18N.t("hint.expSysOld"), 1);
+        return out(false);
+      }
+      try {
+        step("exp", "active", I18N.t("d.expNeedBoot"), null);
+        await this._safeClose(bl.t);
+        ctx._pickedDfu = await ctx.ui.userGate(I18N.t("gate.dfu.btn"), I18N.t("gate.expBoot.text"),
+          () => DfuSeDevice.requestDevice(), null,
+          async () => (await DfuSeDevice.getAuthorizedDevice()) || null);
+        bl = await this._dfuCycle(ctx, step);
+        this._ck();
+      } catch (e) {
+        if (strict || (e && e.message === I18N.t("err.cancelled"))) throw e;
+        Util.err("Could not install the new update program: " + (e && e.message));
+        step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
+        throw e;          /* the session is gone - the update cannot go on without it */
+      }
+      if (!bl.expSupported) {
+        if (strict) throw new UploaderError(I18N.t("err.expOld"), I18N.t("hint.expOld"));
+        step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
+        return out(false);
+      }
+      Util.ok("Update program " + (bl.blVersion ? ((bl.blVersion >> 16) + "." + ((bl.blVersion >> 8) & 255) + "." + (bl.blVersion & 255)) : "") +
+              " installed - it can program the expansion board.");
     }
     step("exp", "active", I18N.t("d.expCheck"), null);
     const det = ctx.demo ? { found: !!ctx.demoHasExp, reason: "NO_BOARD" } : await bl.expDetect();
@@ -859,12 +894,12 @@ const Flows = {
       Util.info("Expansion board check: " + det.reason);
       if (det.reason === "NO_BOARD" && !strict) {
         step("exp", "done", I18N.t("d.expNone"), 1);     // nothing fitted - nothing to do
-        return false;
+        return out(false);
       }
       const msg = det.reason === "NO_BOARD" ? I18N.t("err.noExp") : I18N.t("err.expNoBoot", { r: det.reason });
       if (strict) throw new UploaderError(msg, I18N.t("hint.expRetry"));
       step("exp", "warn", msg + " " + I18N.t("hint.expRetry"), 1);
-      return false;
+      return out(false);
     }
     step("exp", "active", I18N.t("d.expFound"), 0);
     try {
@@ -879,10 +914,10 @@ const Flows = {
       if (strict || (e && e.message === I18N.t("err.cancelled"))) throw e;
       Util.err("Expansion board update failed: " + (e && e.message));
       step("exp", "warn", I18N.t("d.expFailed") + " " + I18N.t("hint.expRetry"), 1);
-      return false;
+      return out(false);
     }
     step("exp", "done", I18N.t("d.expDone"), 1);
-    return true;
+    return out(true);
   },
 
   async runExpOnly(ctx) {
@@ -900,13 +935,13 @@ const Flows = {
       /* Same way in as the full update: a running controller is asked to
        * reboot into update mode, a board in BOOT mode gets the system
        * firmware (the part that knows how to flash the expansion) first. */
-      const bl = (ctx.pkg.system || ctx.demo)
+      let bl = (ctx.pkg.system || ctx.demo)
         ? await this._establishUpdateMode(ctx, step)
         : await this._connectBootloader(ctx, { tries: 3 });
-      await this._expansionPhase(ctx, bl, (id, st, d, p) => {
+      bl = (await this._expansionPhase(ctx, bl, (id, st, d, p) => {
         step(id, st, d, p);
         if (p != null && ctx.onProgress) ctx.onProgress("exp", p);
-      }, true);
+      }, true)).bl;
       /* The controller application was not touched - restart into it. */
       if (ctx.autoJump !== false) await bl.jump();
       try { await bl.t.close(); } catch (e) { /* ignore */ }
