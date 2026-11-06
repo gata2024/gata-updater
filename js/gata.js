@@ -108,6 +108,8 @@ class GataBootloader {
      * firmware says nothing -> null, the user's board choice stands. */
     const b = /BOARD:(rev\d+)/.exec(r.text);
     this.boardRev = b ? b[1] : null;
+    /* 1.0.17+: the system firmware can flash the expansion board (EXP_*). */
+    this.expSupported = /EXP:1/.test(r.text);
     Util.ok("GATA controller answered - ready for the update." +
             (m ? " (system firmware " + m[1] + "." + m[2] + "." + m[3] +
                  (b ? ", " + b[1] + " board" : "") + ")" : ""));
@@ -307,4 +309,175 @@ class GataBootloader {
     try { await this.waitFor(["ESP_RESET_OK"], 4000); } catch (e) { /* device may reset */ }
     Util.ok("ESP32 restarted with its new firmware.");
   }
+
+  /* ------------------------------------------------------ expansion board */
+  /* System firmware 1.0.17+ flashes the expansion board's STM32 through the
+   * main board (I2C cable, ST ROM bootloader). The cable can be noisy, so the
+   * image is checked at every hop:
+   *   - here -> controller: every 128-byte piece carries its offset + CRC32
+   *     and is answered EXP_ACK / EXP_NAK; a NAK or a missing answer resends
+   *     it (up to 10 times); the whole image's CRC32 is checked at EXP_END;
+   *   - controller -> expansion: every 256-byte block is read back and
+   *     compared, a bad pass is erased and redone (3 attempts, slower bus each
+   *     time), and the finished flash is read back whole - its CRC32 must
+   *     equal the image's.
+   * Interrupting it is harmless: the ST ROM bootloader cannot be erased, the
+   * update can always be repeated. */
+
+  /* -> { found: bool, reason } ; reason "NO_BOARD" = no expansion fitted. */
+  async expDetect() {
+    this.clear();
+    await this.send("EXP_DETECT");
+    try {
+      const r = await this.waitFor(["EXP_FOUND", "EXP_NOT_FOUND", "UNKNOWN_COMMAND"], 15000);
+      if (r.keyword === "EXP_FOUND") return { found: true, reason: "" };
+      if (r.keyword === "UNKNOWN_COMMAND") return { found: false, reason: "OLD_SYSTEM" };
+      const m = /EXP_NOT_FOUND:([A-Z_0-9]+)/.exec(r.text);
+      return { found: false, reason: m ? m[1] : "UNKNOWN" };
+    } catch (e) {
+      if (e.message === I18N.t("err.cancelled")) throw e;
+      return { found: false, reason: "NO_ANSWER" };
+    }
+  }
+
+  /* Wait for one exact line (regex on whole lines of the buffer). */
+  async _waitLine(re, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      this._abortCheck();
+      /* only COMPLETE lines: a half-arrived "EXP_ACK:8" must not pass for
+       * the answer to offset 8 when "EXP_ACK:80" is on its way */
+      const lines = this._buf.split(/\r?\n/).slice(0, -1);
+      for (const l of lines) {
+        const m = re.exec(l.trim());
+        if (m) return m;
+      }
+      if (Date.now() > deadline) return null;
+      await Util.sleep(5);
+    }
+  }
+
+  async expWrite(bytes, onProgress, onPhase) {
+    const crc = Crc32.of(bytes);
+    const hex8 = v => (v >>> 0).toString(16).toUpperCase().padStart(8, "0");
+    Util.info("Expansion image: " + Util.fmtBytes(bytes.length) + ", CRC32 " + hex8(crc) +
+              (Validate.expansionBuild(bytes) ? ", " + Validate.expansionBuild(bytes) : ""));
+
+    this.clear();
+    await this.send("EXP_BEGIN:" + bytes.length + ":" + hex8(crc));
+    await this.waitFor(["EXP_BEGIN_OK"], 4000, ["EXP_ERROR", "EXP_BUSY", "UNKNOWN_COMMAND"]);
+
+    /* ---- transfer: one piece at a time, each acknowledged */
+    const CH = 128;
+    let off = 0, resent = 0;
+    while (off < bytes.length) {
+      this._abortCheck();
+      const n = Math.min(CH, bytes.length - off);
+      const piece = bytes.subarray(off, off + n);
+      let hex = "";
+      for (let i = 0; i < n; i++) hex += (piece[i] < 16 ? "0" : "") + piece[i].toString(16);
+      const offHex = off.toString(16).toUpperCase();
+      const line = "EXP_DATA:" + offHex + ":" + hex.toUpperCase() + ":" + hex8(Crc32.of(piece));
+      let acked = false;
+      for (let attempt = 0; attempt < 10 && !acked; attempt++) {
+        this.clear();
+        await this.send(line);
+        const m = await this._waitLine(new RegExp("^EXP_(ACK|NAK):" + offHex + "(?::([A-Z]+)(?::([0-9A-F]+))?)?$"), 1500);
+        if (m && m[1] === "ACK") { acked = true; break; }
+        resent++;
+        if (m && m[2] === "ORDER" && m[3]) {
+          /* the controller holds a different next offset - follow it */
+          const want = parseInt(m[3], 16);
+          Util.warn("Expansion transfer: controller expects offset " + want + " - resuming there.");
+          off = want;
+          acked = null;
+          break;
+        }
+        Util.warn("Expansion piece at " + off + (m ? " refused (" + (m[2] || "?") + ")" : " not acknowledged") +
+                  " - sending it again.");
+        if (m && m[2] === "STATE") {
+          throw new UploaderError("The controller lost the expansion transfer.", I18N.t("hint.retry"));
+        }
+      }
+      if (acked === null) continue;
+      if (!acked) {
+        throw new UploaderError("The expansion image could not be transferred at " +
+          Math.round((off / bytes.length) * 100) + "% (no acknowledgement after 10 tries).", I18N.t("hint.retry"));
+      }
+      off += n;
+      if (onProgress) onProgress(0.3 * off / bytes.length);
+    }
+    if (resent) Util.info("Expansion transfer: " + resent + " piece(s) were sent again.");
+
+    /* ---- whole-image check, then the controller flashes the expansion */
+    this.clear();
+    await this.send("EXP_END");
+    await this.waitFor(["EXP_END_OK"], 4000, ["EXP_ERROR:INCOMPLETE"]);
+    await this.waitFor(["EXP_IMAGE_OK"], 10000, ["EXP_IMAGE_BAD"]);
+    Util.ok("Expansion image received complete by the controller (CRC32 " + hex8(crc) + " matches).");
+
+    /* Progress lines keep coming; the only long silence is the sector erase
+     * (up to ~30 s), so 90 s without any line means the controller is stuck. */
+    let seen = 0;
+    let lastAct = Date.now();
+    for (;;) {
+      this._abortCheck();
+      const text = this._buf;
+      if (text.length !== seen) { seen = text.length; lastAct = Date.now(); }
+      const err = /EXP_ERROR:([A-Z_]+)/.exec(text);
+      if (err) {
+        throw new UploaderError("The expansion board could not be programmed (" + err[1] + ").",
+          I18N.t("hint.expRetry"));
+      }
+      const done = /EXP_COMPLETE:RUNNING:(\d)/.exec(text);
+      if (done) {
+        if (done[1] === "1") Util.ok("Expansion board programmed, verified and running.");
+        else Util.warn("Expansion board programmed and verified, but it did not report running yet.");
+        if (onProgress) onProgress(1);
+        return done[1] === "1";
+      }
+      const lines = text.split(/\r?\n/);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i].trim();
+        let m;
+        if ((m = /^EXP_PROGRESS:WRITE:(\d+)\/(\d+)/.exec(l))) {
+          if (onProgress) onProgress(0.35 + 0.45 * Number(m[1]) / Math.max(1, Number(m[2])));
+          break;
+        }
+        if ((m = /^EXP_PROGRESS:VERIFY:(\d+)\/(\d+)/.exec(l))) {
+          if (onPhase) onPhase(I18N.t("d.expVerify"));
+          if (onProgress) onProgress(0.8 + 0.2 * Number(m[1]) / Math.max(1, Number(m[2])));
+          break;
+        }
+        if (l === "EXP_PROGRESS:ERASE") { if (onPhase) onPhase(I18N.t("d.expErase")); break; }
+        if ((m = /^EXP_RETRY:(\d+):([A-Z_]+)/.exec(l))) {
+          if (onPhase) onPhase(I18N.t("d.expRetry", { n: Number(m[1]) + 1 }));
+          break;
+        }
+      }
+      if (Date.now() - lastAct > 90000) {
+        throw new UploaderError("The controller stopped reporting while programming the expansion board.",
+          I18N.t("hint.expRetry"));
+      }
+      await Util.sleep(100);
+    }
+  }
 }
+
+/* CRC-32 (IEEE 802.3, the same as zip / the system firmware's crc32Upd). */
+const Crc32 = {
+  _t: null,
+  of(bytes) {
+    if (!this._t) {
+      this._t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        this._t[n] = c >>> 0;
+      }
+    }
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = this._t[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+};

@@ -563,11 +563,12 @@ const App = {
     this.$("resultBox").classList.add("hidden");
     const hiddenFor = {
       controller: ["esp"],
-      cloud: ["app", "wipe"],
+      cloud: ["app", "wipe", "exp"],
       both: [],
+      expansion: ["esp", "app", "wipe"],
       /* Erasing installs nothing - the only rows that mean anything are
        * reaching the controller and the erase itself. */
-      erase: ["download", "system", "esp", "wipe"],
+      erase: ["download", "system", "esp", "wipe", "exp"],
     }[mode || "both"] || [];
     // The memory-preparation row only exists on a first installation.
     const chk = this.$("chkFirstInstall");
@@ -872,7 +873,7 @@ const App = {
   setBusy(b) {
     this.busy = b;
     this.$("btnCancel").classList.toggle("hidden", !b);
-    for (const id of ["btnUpdateNow", "btnUpdCtrl", "btnUpdCloud", "btnUpdBoth", "btnRefresh", "btnRescan"]) {
+    for (const id of ["btnUpdateNow", "btnUpdCtrl", "btnUpdCloud", "btnUpdBoth", "btnUpdExp", "btnRefresh", "btnRescan"]) {
       const el = this.$(id);
       if (el) el.disabled = b;
     }
@@ -886,9 +887,12 @@ const App = {
   async getPackage(mode) {
     // Only fetch what the chosen action actually flashes.
     const needs = {
-      controller: { controller: true, system: true, esp: "no" },
-      cloud: { controller: false, system: true, esp: "required" },
-      both: { controller: true, system: true, esp: "optional" },
+      controller: { controller: true, system: true, esp: "no", expansion: "optional" },
+      cloud: { controller: false, system: true, esp: "required", expansion: "no" },
+      both: { controller: true, system: true, esp: "optional", expansion: "optional" },
+      /* 2026-11-06: the expansion board alone - system firmware too, for a
+       * board that has to be reached through BOOT mode */
+      expansion: { controller: false, system: true, esp: "no", expansion: "required" },
       /* Erasing the controller software installs nothing - but a board sitting
        * in BOOT mode has no bootloader to take the command, so the system
        * firmware has to go in first. Nothing else is downloaded. */
@@ -953,6 +957,7 @@ const App = {
         firstInstall: !!(this.$("chkFirstInstall") && this.$("chkFirstInstall").checked),
         demo: this.demo(),
         demoHasEsp: store.getItem("gata.demoEsp") !== "0",
+        demoHasExp: true,
         autoJump: this.$("chkAutoJump").checked,
         /* Forward EVERY argument: dropping `alt` hid the second choice
          * ("board is running normally") so the only way forward was BOOT
@@ -964,7 +969,8 @@ const App = {
         },
         onDeviceLine: line => Util.dev("< " + line),
       };
-      await Flows.runFullUpdate(ctx);
+      if (mode === "expansion") await Flows.runExpOnly(ctx);
+      else await Flows.runFullUpdate(ctx);
 
       /* Say "done" and nothing else - the install was verified, so there is
        * nothing left to watch for. The ONE exception is a BOOT switch left in
@@ -972,7 +978,7 @@ const App = {
        * power-off, and only this screen can still say so. */
       const warn = ctx._bootSwitchHigh ? " " + I18N.t("d.bootHigh") : "";
       this.showResult(true, I18N.t("res.ok.title"),
-        I18N.t(mode === "cloud" ? "res.cloudOk.text" : "res.ok.text") + warn);
+        I18N.t(mode === "cloud" ? "res.cloudOk.text" : mode === "expansion" ? "res.expOk.text" : "res.ok.text") + warn);
     } catch (e) {
       Util.err(e.message + (e.hint ? " — " + e.hint : ""));
       this.markActiveStepFailed();
@@ -1042,6 +1048,7 @@ const App = {
     this.$("btnUpdCtrl").onclick = () => this.onUpdate("controller");
     this.$("btnUpdCloud").onclick = () => this.onUpdate("cloud");
     this.$("btnUpdBoth").onclick = () => this.onUpdate("both");
+    this.$("btnUpdExp").onclick = () => this.onUpdate("expansion");
     this.$("btnCancel").onclick = () => { Flows.cancel(); Util.warn("Cancelling…"); };
     this.$("btnRefresh").onclick = () => this.loadManifest();
     /* "Scan again" belongs to the folder/built-in sources; for hand-picked

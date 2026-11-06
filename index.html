@@ -151,6 +151,10 @@
           <span class="acticon both"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5h5L9.5 22 19 10h-5.5L13 2z"/></svg></span>
           <span class="actwords"><b data-i18n="btn.updBoth">Update controller + cloud</b><small data-i18n="btn.updBothDesc">Everything: system firmware, controller software and ESP32</small></span>
         </button>
+        <button id="btnUpdExp" class="btn action">
+          <span class="acticon ctrl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h8v12H3zM13 6h8v12h-8zM11 11h2v2h-2z"/></svg></span>
+          <span class="actwords"><b data-i18n="btn.updExp">Update expansion board</b><small data-i18n="btn.updExpDesc">Only the expansion board firmware, written through the controller — the controller software is kept</small></span>
+        </button>
       </div>
     </details>
     <div class="row center gap">
@@ -182,6 +186,7 @@
       <li data-step="connect"><span class="dot"></span><div><b data-i18n="st.connect">Connect</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="wipe"><span class="dot"></span><div><b data-i18n="st.wipe">Memory preparation</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="esp"><span class="dot"></span><div><b data-i18n="st.esp">ESP32 module</b><small></small><div class="bar"><i></i></div></div></li>
+      <li data-step="exp"><span class="dot"></span><div><b data-i18n="st.exp">Expansion board</b><small></small><div class="bar"><i></i></div></div></li>
       <li data-step="app"><span class="dot"></span><div><b data-i18n="st.app">Controller software</b><small></small><div class="bar"><i></i></div></div></li>
     </ul>
 

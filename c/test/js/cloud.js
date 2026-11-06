@@ -13,7 +13,8 @@
  *     "version": "15.4.26", "date": "2026-04-15", "notes": "…", "latest": true,
  *     "controller":  { "url": "controller_18_8_27.bin", "sha256": "…", "size": … },
  *     "system":      { "url": "system_18_8_27.bin",     "sha256": "…", "size": … },
- *     "esp": { "bootloader": {…}, "partitions": {…}, "boot_app0": {…}, "firmware": {…} }
+ *     "esp": { "bootloader": {…}, "partitions": {…}, "boot_app0": {…}, "firmware": {…} },
+ *     "expansion":   { "url": "expansion_….bin", "sha256": "…", "size": … }   (optional, 2026-11-06)
  *   }]
  * }
  */
@@ -321,6 +322,9 @@ const Cloud = {
       if (v.esp && !v.esp.firmware) {
         throw new UploaderError("Manifest error: " + where + ".esp needs at least esp.firmware.");
       }
+      if (v.expansion && !v.expansion.url) {
+        throw new UploaderError("Manifest error: " + where + ".expansion has no \"url\".");
+      }
     });
   },
 
@@ -492,17 +496,19 @@ const Cloud = {
   },
 
   /* Download what one version needs for the chosen action.
-   * needs = { controller: bool, system: bool, esp: "no"|"optional"|"required" }
-   * Returns { controller, system, esp: {bootloader,partitions,boot_app0,firmware}|null } */
+   * needs = { controller: bool, system: bool, esp: "no"|"optional"|"required",
+   *           expansion: "no"|"optional"|"required" }
+   * Returns { controller, system, esp: {bootloader,partitions,boot_app0,firmware}|null,
+   *           expansion: Uint8Array|null } */
   async downloadPackage(manifest, ver, onProgress, needs) {
     for (const k of Object.keys(needs || {})) {
-      if (!["controller", "system", "esp"].includes(k)) {
+      if (!["controller", "system", "esp", "expansion"].includes(k)) {
         throw new UploaderError("Internal error: unknown download requirement '" + k + "'.");
       }
     }
-    const n = Object.assign({ controller: true, system: true, esp: "optional" }, needs || {});
+    const n = Object.assign({ controller: true, system: true, esp: "optional", expansion: "no" }, needs || {});
     const report = (name, frac) => { if (onProgress) onProgress(name, frac); };
-    const pkg = { controller: null, system: null, esp: null };
+    const pkg = { controller: null, system: null, esp: null, expansion: null };
 
     /* Package license: versions published with a .lic file are BOUND to a
      * channel and to their exact controller binary (by hash). The token must
@@ -559,6 +565,15 @@ const Cloud = {
         }
       } else if (n.esp === "required") {
         throw new UploaderError(I18N.t("err.noEspFiles"));
+      }
+    }
+
+    if (n.expansion !== "no") {
+      if (ver.expansion && ver.expansion.url) {
+        pkg.expansion = await this.download(manifest, ver.expansion, "Expansion board firmware",
+          f => report("Expansion board firmware", f));
+      } else if (n.expansion === "required") {
+        throw new UploaderError(I18N.t("err.noExpFile"));
       }
     }
     return pkg;

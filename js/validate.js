@@ -36,6 +36,38 @@ const Validate = {
     return true;
   },
 
+  /* Expansion board firmware (2026-11-06) - the expansion's own STM32H750,
+   * internal flash 0x08000000, one 128 KB sector. Its vector table looks just
+   * like the main board's system firmware, so that one is recognised by the
+   * text its INFO answer carries and refused. */
+  _has(bytes, str) {
+    const k = new TextEncoder().encode(str);
+    outer: for (let i = 0; i + k.length <= bytes.length; i++) {
+      if (bytes[i] !== k[0]) continue;
+      for (let j = 1; j < k.length; j++) if (bytes[i + j] !== k[j]) continue outer;
+      return i;
+    }
+    return -1;
+  },
+  isValidExpansion(bytes) {
+    if (!bytes || bytes.length < 8 || bytes.length > APP_CONFIG.systemFlashMax) return false;
+    const sp = this._word(bytes, 0);
+    const reset = this._word(bytes, 4);
+    const spOk = (sp >= 0x20000000 && sp <= 0x20020000) || (sp >= 0x24000000 && sp <= 0x24080000);
+    if (!spOk) return false;
+    if (!(reset & 1) || reset < 0x08000000 || reset >= 0x08020000) return false;
+    if (this._has(bytes, "EXTERNAL_FLASH:16MB@") >= 0) return false;      // main-board system firmware
+    return true;
+  },
+  /* "GATA_EXP_BUILD:<date> <time>" stamped by the expansion firmware, or "" */
+  expansionBuild(bytes) {
+    const i = bytes ? this._has(bytes, "GATA_EXP_BUILD:") : -1;
+    if (i < 0) return "";
+    let e = i;
+    while (e < bytes.length && e - i < 64 && bytes[e] !== 0) e++;
+    return new TextDecoder().decode(bytes.subarray(i, e));
+  },
+
   /* ESP32 app/bootloader images start with the 0xE9 image magic. */
   isValidEspImage(bytes) {
     return !!bytes && bytes.length > 16 && bytes[0] === 0xE9;
@@ -54,7 +86,7 @@ const Validate = {
      * demand (or skip) the wrong file - that is how "update cloud module"
      * once started asking for a controller image it never downloads. */
     for (const k of Object.keys(needs || {})) {
-      if (!["controller", "system", "esp"].includes(k)) {
+      if (!["controller", "system", "esp", "expansion"].includes(k)) {
         throw new UploaderError("Internal error: unknown package requirement '" + k + "'.");
       }
     }
@@ -79,6 +111,13 @@ const Validate = {
       if (pkg.esp.bootloader && !this.isValidEspImage(pkg.esp.bootloader)) bad("val.esp", "bootloader.bin");
       if (pkg.esp.partitions && !this.isValidEspPartitions(pkg.esp.partitions)) bad("val.esp", "partitions.bin");
       parts.push("ESP32");
+    }
+    if (n.expansion && !pkg.expansion) {
+      throw new UploaderError(I18N.t("err.noExpFile"));
+    }
+    if (pkg.expansion) {
+      if (!this.isValidExpansion(pkg.expansion)) bad("val.exp", "expansion firmware");
+      parts.push("expansion board");
     }
     Util.ok("Package validation passed (" + parts.join(" + ") + ").");
   },

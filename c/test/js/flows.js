@@ -666,6 +666,14 @@ const Flows = {
         }
       }
 
+      /* Expansion board (2026-11-06) - after the ESP, before the application:
+       * the app region is still erased, so the update window cannot close
+       * during the ~1-2 minute I2C programming, and the old application is
+       * not running to talk on that cable meanwhile. A failure here does NOT
+       * stop the controller update - the expansion's ROM bootloader cannot be
+       * erased, so it can be repeated at any time with "Expansion board only". */
+      await this._expansionPhase(ctx, bl, step, false);
+
       /* Application - streamed with the ESP silenced (or absent + defused).
        * If the controller stops accepting data mid-stream, do NOT end the
        * update: ask for a power cycle, wait for the board to come back and
@@ -829,6 +837,85 @@ const Flows = {
       this.running = false;
       await this._releaseWakeLock();
       this._record("action.app", ok, (Date.now() - t0) / 1000, ctx.version);
+    }
+  },
+
+  /* One expansion pass on an open bootloader session. strict = throw on any
+   * problem (stand-alone action); otherwise report it on the step and go on. */
+  async _expansionPhase(ctx, bl, step, strict) {
+    if (!ctx.pkg.expansion) {
+      step("exp", "done", I18N.t("d.expNotIncluded"), 1);
+      return false;
+    }
+    if (!bl.expSupported && !ctx.demo) {
+      if (strict) throw new UploaderError(I18N.t("err.expOld"), I18N.t("hint.expOld"));
+      step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
+      return false;
+    }
+    step("exp", "active", I18N.t("d.expCheck"), null);
+    const det = ctx.demo ? { found: !!ctx.demoHasExp, reason: "NO_BOARD" } : await bl.expDetect();
+    this._ck();
+    if (!det.found) {
+      Util.info("Expansion board check: " + det.reason);
+      if (det.reason === "NO_BOARD" && !strict) {
+        step("exp", "done", I18N.t("d.expNone"), 1);     // nothing fitted - nothing to do
+        return false;
+      }
+      const msg = det.reason === "NO_BOARD" ? I18N.t("err.noExp") : I18N.t("err.expNoBoot", { r: det.reason });
+      if (strict) throw new UploaderError(msg, I18N.t("hint.expRetry"));
+      step("exp", "warn", msg + " " + I18N.t("hint.expRetry"), 1);
+      return false;
+    }
+    step("exp", "active", I18N.t("d.expFound"), 0);
+    try {
+      if (ctx.demo) {
+        for (let i = 1; i <= 10; i++) { await Util.sleep(150); step("exp", "active", I18N.t("d.expProg", { p: i * 10 }), i / 10); }
+      } else {
+        await bl.expWrite(ctx.pkg.expansion,
+          f => step("exp", "active", I18N.t("d.expProg", { p: Math.round(f * 100) }), f),
+          msg => step("exp", "active", msg, null));
+      }
+    } catch (e) {
+      if (strict || (e && e.message === I18N.t("err.cancelled"))) throw e;
+      Util.err("Expansion board update failed: " + (e && e.message));
+      step("exp", "warn", I18N.t("d.expFailed") + " " + I18N.t("hint.expRetry"), 1);
+      return false;
+    }
+    step("exp", "done", I18N.t("d.expDone"), 1);
+    return true;
+  },
+
+  async runExpOnly(ctx) {
+    this.cancelRequested = false;
+    this.running = true;
+    const t0 = Date.now();
+    let ok = false;
+    try {
+      if (!ctx.pkg.expansion) throw new UploaderError(I18N.t("err.noExpFile"));
+      if (!Validate.isValidExpansion(ctx.pkg.expansion)) {
+        throw new UploaderError(I18N.t("val.exp", { f: "expansion firmware" }));
+      }
+      await this._acquireWakeLock();
+      const step = (ctx.ui && ctx.ui.step) || (() => {});
+      /* Same way in as the full update: a running controller is asked to
+       * reboot into update mode, a board in BOOT mode gets the system
+       * firmware (the part that knows how to flash the expansion) first. */
+      const bl = (ctx.pkg.system || ctx.demo)
+        ? await this._establishUpdateMode(ctx, step)
+        : await this._connectBootloader(ctx, { tries: 3 });
+      await this._expansionPhase(ctx, bl, (id, st, d, p) => {
+        step(id, st, d, p);
+        if (p != null && ctx.onProgress) ctx.onProgress("exp", p);
+      }, true);
+      /* The controller application was not touched - restart into it. */
+      if (ctx.autoJump !== false) await bl.jump();
+      try { await bl.t.close(); } catch (e) { /* ignore */ }
+      Util.ok("Expansion board update finished.");
+      ok = true;
+    } finally {
+      this.running = false;
+      await this._releaseWakeLock();
+      this._record("action.exp", ok, (Date.now() - t0) / 1000, ctx.version);
     }
   },
 

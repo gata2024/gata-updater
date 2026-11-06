@@ -5,6 +5,7 @@
  *
  *   main_firmware/system*.bin         system firmware (legacy: B1.bin / B3.bin)
  *   main_firmware/controller*.bin     controller software (legacy: M*.bin)
+ *   main_firmware/*expansion*.bin     expansion board firmware (optional, 2026-11-06)
  *   cloud_firmware/bootloader.bin, partitions.bin, boot_app0.bin, firmware.bin
  *
  * Discovery uses the local server's /__local_list endpoint (started by
@@ -26,11 +27,13 @@ const LocalSource = {
    * are still accepted so existing uploader folders keep working. */
   matchNames(mainNames, cloudNames) {
     const ci = (arr, re) => arr.find(n => re.test(n)) || null;
+    const isExp = n => /expansion.*\.bin$/i.test(n);
     const mains = mainNames.filter(n => /^(controller|m).*\.bin$/i.test(n) &&
-                                        !/^system.*\.bin$/i.test(n));
+                                        !/^system.*\.bin$/i.test(n) && !isExp(n));
     return {
       system: ci(mainNames, /^system.*\.bin$/i) || ci(mainNames, /^b1\.bin$/i) || ci(mainNames, /^b3\.bin$/i),
       mains,
+      expansion: mainNames.find(isExp) || null,
       esp: {
         bootloader: ci(cloudNames, /^bootloader\.bin$/i),
         partitions: ci(cloudNames, /^partitions\.bin$/i),
@@ -127,6 +130,7 @@ const LocalSource = {
       viaListing,
       system: m.system,
       mains: m.mains.map(name => ({ name, size: sizeOf[name] || 0 })),
+      expansion: m.expansion,
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
       receipt,
@@ -138,7 +142,8 @@ const LocalSource = {
     Util.info("Local folder scan (" + (viaListing ? "listing" : "name probe") + "): " +
       "system=" + (found.system || "none") +
       " controller=[" + found.mains.map(x => x.name).join(", ") + "]" +
-      " cloud=" + (found.espComplete ? "complete" : (m.esp.firmware ? "firmware-only" : "none")));
+      " cloud=" + (found.espComplete ? "complete" : (m.esp.firmware ? "firmware-only" : "none")) +
+      " expansion=" + (found.expansion || "none"));
     return found;
   },
 
@@ -165,6 +170,7 @@ const LocalSource = {
       picked: true,
       system: m.system,
       mains: m.mains.map(n => ({ name: n, size: (byName[n] || {}).size || 0 })),
+      expansion: m.expansion,
       esp: m.esp,
       espComplete: !!(m.esp.bootloader && m.esp.partitions && m.esp.boot_app0 && m.esp.firmware),
       receipt: null,
@@ -175,7 +181,8 @@ const LocalSource = {
     Util.info("Picked from this device: " +
       (found.system || "no system firmware") + ", " +
       (found.mains.length ? found.mains.map(x => x.name).join(", ") : "no controller software") +
-      (found.esp.firmware ? ", cloud module" : ""));
+      (found.esp.firmware ? ", cloud module" : "") +
+      (found.expansion ? ", expansion board" : ""));
     return found;
   },
 
@@ -194,7 +201,8 @@ const LocalSource = {
   },
 
   /* Load the files a given action needs.
-   * needs = { controller, system, esp: "no"|"optional"|"required" };
+   * needs = { controller, system, esp: "no"|"optional"|"required",
+   *           expansion: "no"|"optional"|"required" (missing = "no") };
    * mainName = the chosen controller file. */
   /* Prove a .bin is EXACTLY the file that was put into this folder.
    *  - listed in the receipt and the hash matches -> "verified"
@@ -224,7 +232,8 @@ const LocalSource = {
 
   async load(found, needs, mainName, onProgress) {
     const report = (name, f) => { if (onProgress) onProgress(name, f); };
-    const pkg = { controller: null, system: null, esp: null };
+    const pkg = { controller: null, system: null, esp: null, expansion: null };
+    const expNeed = needs.expansion || "no";
     const receipt = found.receipt;
 
     /* Files chosen from the device are already in hand - read them straight
@@ -249,6 +258,14 @@ const LocalSource = {
           }
         } else if (needs.esp === "required") {
           throw new UploaderError(I18N.t("err.noEspFiles"), I18N.t("local.hintPick"));
+        }
+      }
+      if (expNeed !== "no") {
+        if (found.expansion) {
+          pkg.expansion = await found._read(found.expansion);
+          report(found.expansion, 1);
+        } else if (expNeed === "required") {
+          throw new UploaderError(I18N.t("err.noExpFile"), I18N.t("local.hintPick"));
         }
       }
       return pkg;
@@ -285,6 +302,16 @@ const LocalSource = {
         }
       } else if (needs.esp === "required") {
         throw new UploaderError(I18N.t("err.noEspFiles"), I18N.t("local.hintFiles"));
+      }
+    }
+
+    if (expNeed !== "no") {
+      if (found.expansion) {
+        pkg.expansion = await this._fetchBin(this._url(this.MAIN_DIR + "/" + found.expansion),
+          "Expansion board firmware " + found.expansion, f => report(found.expansion, f));
+        await this._verify(pkg.expansion, this.MAIN_DIR + "/" + found.expansion, receipt);
+      } else if (expNeed === "required") {
+        throw new UploaderError(I18N.t("err.noExpFile"), I18N.t("local.hintFiles"));
       }
     }
     return pkg;
