@@ -27,6 +27,12 @@ const Util = {
     return "0x" + n.toString(16).toUpperCase().padStart(width || 8, "0");
   },
 
+  /* update-program version number (INFO "BL:" / GATA_BL_VERSION) -> "1.0.18" */
+  fmtBlVersion(v) {
+    if (!v) return "?";
+    return (v >> 16) + "." + ((v >> 8) & 255) + "." + (v & 255);
+  },
+
   fmtBytes(n) {
     if (n == null) return "?";
     if (n < 1024) return n + " B";

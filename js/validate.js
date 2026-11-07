@@ -59,6 +59,17 @@ const Validate = {
     if (this._has(bytes, "EXTERNAL_FLASH:16MB@") >= 0) return false;      // main-board system firmware
     return true;
   },
+  /* "GATA_BL_VERSION:1.0.18" in a system firmware (update program 1.0.18+)
+   * -> 0x010012 (the number INFO's BL: line gives); 0 = no mark (older) */
+  blVersionMark(bytes) {
+    const i = bytes ? this._has(bytes, "GATA_BL_VERSION:") : -1;
+    if (i < 0) return 0;
+    let t = "";
+    for (let k = i + 16; k < bytes.length && k < i + 30 && bytes[k] >= 0x2E && bytes[k] <= 0x39; k++) t += String.fromCharCode(bytes[k]);
+    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(t);
+    return m ? (Number(m[1]) * 65536 + Number(m[2]) * 256 + Number(m[3])) : 0;
+  },
+
   /* "GATA_EXP_BUILD:<date> <time>" stamped by the expansion firmware, or "" */
   expansionBuild(bytes) {
     const i = bytes ? this._has(bytes, "GATA_EXP_BUILD:") : -1;

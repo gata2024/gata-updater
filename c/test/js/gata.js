@@ -328,15 +328,24 @@ class GataBootloader {
   async expDetect() {
     this.clear();
     await this.send("EXP_DETECT");
+    /* 1.0.18+ reports each stage (EXP_DIAG:...) - they go to the log and
+     * the last one into the reason, so a failure says WHERE it stopped */
+    const diag = () => {
+      const d = (this._buf.match(/EXP_DIAG:[^\r\n]+/g) || []);
+      d.forEach((x) => Util.info("Expansion check: " + x.slice(9)));
+      return d.length ? d[d.length - 1].slice(9) : "";
+    };
     try {
       const r = await this.waitFor(["EXP_FOUND", "EXP_NOT_FOUND", "UNKNOWN_COMMAND"], 15000);
+      const last = diag();
       if (r.keyword === "EXP_FOUND") return { found: true, reason: "" };
       if (r.keyword === "UNKNOWN_COMMAND") return { found: false, reason: "OLD_SYSTEM" };
       const m = /EXP_NOT_FOUND:([A-Z_0-9]+)/.exec(r.text);
-      return { found: false, reason: m ? m[1] : "UNKNOWN" };
+      return { found: false, reason: (m ? m[1] : "UNKNOWN") + (last ? " - " + last : "") };
     } catch (e) {
       if (e.message === I18N.t("err.cancelled")) throw e;
-      return { found: false, reason: "NO_ANSWER" };
+      const last = diag();
+      return { found: false, reason: "NO_ANSWER" + (last ? " - last: " + last : "") };
     }
   }
 

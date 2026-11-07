@@ -850,7 +850,14 @@ const Flows = {
       step("exp", "done", I18N.t("d.expNotIncluded"), 1);
       return out(false);
     }
-    if (!bl.expSupported && !ctx.demo) {
+    /* the update program in this version, by its mark (1.0.18+), e.g. 0x010012 */
+    const sysMark = ctx.pkg.system ? Validate.blVersionMark(ctx.pkg.system) : 0;
+    const sysNewer = sysMark > 0 && (bl.blVersion || 0) > 0 && sysMark > bl.blVersion;
+    if (sysNewer && !ctx.demo) {
+      Util.info("This version carries a newer update program (" + Util.fmtBlVersion(sysMark) + ") than the controller runs (" +
+                Util.fmtBlVersion(bl.blVersion) + ") - it fixes the expansion programming, installing it first.");
+    }
+    if ((!bl.expSupported || sysNewer) && !ctx.demo) {
       /* 2026-11-06: the board's update program is older than 1.0.17 and cannot
        * program the expansion. A new update program is written ONLY in BOOT
        * mode (DFU) - so when this version carries one that can, ask for BOOT
@@ -879,7 +886,7 @@ const Flows = {
         step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
         throw e;          /* the session is gone - the update cannot go on without it */
       }
-      if (!bl.expSupported) {
+      if (!bl.expSupported || (sysMark > 0 && (bl.blVersion || 0) < sysMark)) {
         if (strict) throw new UploaderError(I18N.t("err.expOld"), I18N.t("hint.expOld"));
         step("exp", "warn", I18N.t("err.expOld") + " " + I18N.t("hint.expOld"), 1);
         return out(false);
