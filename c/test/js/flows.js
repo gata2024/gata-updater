@@ -903,9 +903,15 @@ const Flows = {
         step("exp", "done", I18N.t("d.expNone"), 1);     // nothing fitted - nothing to do
         return out(false);
       }
-      const msg = det.reason === "NO_BOARD" ? I18N.t("err.noExp") : I18N.t("err.expNoBoot", { r: det.reason });
-      if (strict) throw new UploaderError(msg, I18N.t("hint.expRetry"));
-      step("exp", "warn", msg + " " + I18N.t("hint.expRetry"), 1);
+      /* 2026-11-07: the expansion firmware updates itself (update program
+       * 1.0.21+). Firmware from before that answers but cannot take an update
+       * over the cable - it needs ONE install with an ST-Link first. */
+      const noSelf = /^NO_SELF_UPDATE/.test(det.reason);
+      const msg = det.reason === "NO_BOARD" ? I18N.t("err.noExp")
+        : noSelf ? I18N.t("err.expNoSelf") : I18N.t("err.expNoBoot", { r: det.reason });
+      const hint = noSelf ? I18N.t("hint.expNoSelf") : I18N.t("hint.expRetry");
+      if (strict) throw new UploaderError(msg, hint);
+      step("exp", "warn", msg + " " + hint, 1);
       return out(false);
     }
     step("exp", "active", I18N.t("d.expFound"), 0);
