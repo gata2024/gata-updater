@@ -1,7 +1,14 @@
 {
     "note":  "Firmware that ships with the app. The service worker stores these on the device at first run, so the updater also works with no internet.",
     "main_firmware":  [
-
+                          {
+                              "name":  "controller_17_11_26_Test_rev8.bin",
+                              "size":  1367316
+                          },
+                          {
+                              "name":  "system_17_11_26_Test_rev8.bin",
+                              "size":  127620
+                          }
                       ],
     "cloud_firmware":  [
 
